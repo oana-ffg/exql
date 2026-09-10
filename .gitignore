@@ -1,0 +1,14 @@
+node_modules/
+dist/
+bin/
+obj/
+server/wwwroot/
+.vs/
+*.user
+*.log
+*.tsbuildinfo
+artifacts/
+playwright-report/
+test-results/
+.env*
+!.env.example
