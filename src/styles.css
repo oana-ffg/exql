@@ -10,6 +10,31 @@
   --accent: #abe8c6;
   color-scheme: dark;
 }
+.update-notice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 18px;
+  border-bottom: 1px solid var(--line);
+  background: #17231f;
+  color: #b5d4c3;
+  font-size: 12px;
+}
+.update-version {
+  color: var(--muted);
+  white-space: nowrap;
+}
+.update-message {
+  flex: 1;
+}
+.update-notice button {
+  padding: 4px 8px;
+  font-size: 12px;
+}
+.update-warning {
+  background: #302719;
+  color: #f0cf90;
+}
 .context-menu {
   position: fixed;
   z-index: 1000;

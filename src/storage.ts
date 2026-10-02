@@ -5,8 +5,13 @@ declare global {
   interface Window {
     exqlDirty?: boolean;
     exqlPendingWrites?: number;
+    exqlStorageFailed?: boolean;
+    exqlWorkspaceReady?: boolean;
   }
 }
+
+// A failed save remains unsafe for restart until that key is successfully saved.
+const failedSaves = new Set<string>();
 
 // Disk-backed workspace state is independent of the desktop host's randomly assigned port.
 export function useStored<T>(key: "scratch" | "library", fallback: T) {
@@ -30,8 +35,13 @@ export function useStored<T>(key: "scratch" | "library", fallback: T) {
     window.exqlPendingWrites = (window.exqlPendingWrites ?? 0) + 1;
     queue.current = queue.current
       .then(() => request(`/workspace/${key}`, next))
-      .catch(report)
+      .then(() => failedSaves.delete(key))
+      .catch((error: Error) => {
+        failedSaves.add(key);
+        report(error);
+      })
       .finally(() => {
+        window.exqlStorageFailed = failedSaves.size > 0;
         window.exqlPendingWrites = (window.exqlPendingWrites ?? 1) - 1;
       });
   }

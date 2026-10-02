@@ -1,4 +1,11 @@
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import {
   ArrowLeft,
   ArrowRight,
@@ -21,6 +28,7 @@ import { DataGrid } from "./DataGrid";
 import { FilterBar } from "./FilterBar";
 import { Modal } from "./Modal";
 import { Sidebar } from "./Sidebar";
+import { UpdateNotice } from "./UpdateNotice";
 import { useStored } from "./storage";
 import type {
   Connection,
@@ -72,7 +80,8 @@ export default function App() {
   const result = queryResponse?.results[resultIndex];
   const savedQuery = library.queries.find((query) => query.id === savedId);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    window.exqlWorkspaceReady = true;
     window.exqlDirty = edits.length > 0 || !!busy;
     const handler = (event: BeforeUnloadEvent) => {
       if (edits.length || busy) {
@@ -80,7 +89,10 @@ export default function App() {
       }
     };
     window.addEventListener("beforeunload", handler);
-    return () => window.removeEventListener("beforeunload", handler);
+    return () => {
+      window.exqlWorkspaceReady = false;
+      window.removeEventListener("beforeunload", handler);
+    };
   }, [edits.length, busy]);
   useEffect(() => {
     const handler = (event: Event) =>
@@ -375,6 +387,7 @@ export default function App() {
             )}
           </div>
         </header>
+        <UpdateNotice />
         {(table || mode === "query") && (
           <div className="tab-bar">
             <button

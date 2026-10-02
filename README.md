@@ -4,9 +4,19 @@ A portable Windows workspace for Microsoft SQL Server and Azure SQL Database. Bu
 
 ## Run the portable app
 
-Open `dist/ExQL.exe`. No installer, administrator rights, Node.js, or .NET installation is needed for the published app. It includes the .NET runtime and uses the Microsoft WebView2 runtime already installed on this PC. Other Windows machines need WebView2 available. The build targets Windows x64.
+Download the portable ZIP from [GitHub Releases](https://github.com/oana-ffg/exql/releases), extract the **entire ZIP** into a folder you can write to, and open the root `ExQL.exe`. Keep the updater and `current` folder beside it. No installer, administrator rights, Node.js, or .NET installation is needed. It includes the .NET runtime and uses Microsoft WebView2; other Windows machines need WebView2 available. The build targets Windows x64.
 
 The app is currently unsigned. No elevation is requested. It runs as your Windows account.
+
+## Automatic updates
+
+The desktop app checks this repository's public GitHub Releases at startup and every six hours while open. **Check for updates** runs a manual check. New stable versions download in the background; **Restart to update** applies a verified package after the workspace and SQL host shut down. Updates never restart the app automatically. A downloaded update remains available after you close and reopen ExQL.
+
+Restarting for an update is blocked while queries are running, cell edits are staged, workspace writes are pending or have failed, or a dialog is open. Save or discard edits and finish those operations first. SQL scratch text and saved queries are persisted independently of the application files. Updates preserve `%LOCALAPPDATA%/ExQL` and Windows Credential Manager entries. Only one instance may run from each application folder so another instance cannot be interrupted by its updater.
+
+A failed download or integrity check leaves the current app running and offers **Retry update**. The next scheduled check also retries. Application files must be writable by your account. Package hashes detect corrupt downloads; they are not publisher signatures. Releases currently remain unsigned, so authenticity relies on HTTPS and control of the GitHub repository. Windows code signing requires a separately configured certificate or signing service.
+
+Existing standalone `dist/ExQL.exe` builds predate this updater: switch to the new portable ZIP once. Development builds run without update checks. The update implementation uses the pinned, MIT-licensed [Velopack](https://github.com/velopack/velopack) SDK and CLI; it requires no paid Velopack service or client-side GitHub token.
 
 Create a connection from **Connect to database**. For the included local test database use server `localhost`, database `ExqlDemo`, Windows integrated authentication, and **Trust server certificate (local development)**. Azure SQL should use its server hostname, encryption enabled, and certificate trust disabled. SQL login and Microsoft Entra interactive authentication are supported by Microsoft.Data.SqlClient. Azure connectivity requires an accessible server and suitable firewall/network rules.
 
@@ -53,7 +63,11 @@ dotnet build desktop --no-restore
 npm start
 ```
 
-Or run `./start.ps1`. Build a self-contained single EXE with `./publish.ps1`. Output goes to `dist/ExQL.exe`.
+Or run `./start.ps1`. Build the portable ZIP and update feed with `./publish.ps1`. Output goes to `dist/releases/`; extract `ExQL.Desktop-win-x64-Portable.zip` into a writable folder to run it. `publish.ps1` only builds local files and does not upload anything. The app version comes from `package.json`; `-Version` and `-OutputDirectory` allow isolated test builds. The Velopack CLI version is read from the desktop project and installed under `artifacts/tools`.
+
+To publish a release, update the version with `npm version patch --no-git-tag-version`, write accurate release notes, run the checks below, and commit and push to `origin/main`. For the initial release, run `./scripts/release.ps1 -ReleaseNotes releases/0.1.0.md`. This separate command checks that the working tree is clean and matches GitHub's main branch, runs the local gate, builds in a fresh directory, uploads a draft with all assets, and publishes it. It uses your existing `gh` sign-in. If uploading fails, inspect the draft before retrying. A version must never be reused for different binaries.
+
+The release script currently produces full update packages. `publish.ps1` can also generate deltas when its output directory contains the previous full package. Do not upload experimental test feeds as production releases.
 
 For frontend hot reload, first build the frontend once so embedded assets exist, then run `npm run server` and `npm run dev` in separate terminals. The frontend dev URL is `http://127.0.0.1:5173`; the standalone test host is `http://127.0.0.1:5274`. To isolate test settings, run:
 
@@ -80,6 +94,8 @@ npm run format:check
 
 The Windows credential tests create randomly named test entries, verify write/read/update/delete and password-free profile persistence, then remove their entries. The browser tests exercise the real SQL Server; no database API is mocked.
 
-Optional packaged-desktop checks: launch `dist/ExQL.exe --automation-port 9223`, then run `node scripts/verify-desktop.mjs`. It saves the Local development demo connection and Browse work items query. Restart the EXE with that flag and run `node scripts/verify-desktop-restart.mjs` to verify persistence and a native download. The debugging port is disabled during normal launches.
+Optional packaged-desktop checks: launch the extracted portable app with `--automation-port 9223`, then run `node scripts/verify-desktop.mjs`. It saves the Local development demo connection and Browse work items query. Restart the EXE with that flag and run `node scripts/verify-desktop-restart.mjs` to verify persistence and a native download. The debugging port is disabled during normal launches.
+
+Run `./scripts/test-updates.ps1` to build and test a real portable `0.0.1 → 0.0.2` update. It uses a fresh directory under `artifacts`, port 9224, and the existing `ExqlDemo` database. It rejects a corrupt package, retries successfully, verifies restart guards against failed/pending saves, a running SQL query and uncommitted grid edits, and checks persisted SQL and connection profiles after replacement and relaunch. It never commits the staged database edit or publishes a release. Screenshots remain in the test directory. The test-only `--automation-update-directory` option accepts a local directory and requires both an automation port and an explicit isolated `--data-directory`; normal builds always use the fixed GitHub repository.
 
 Azure SQL offers a free allowance, subject to subscription eligibility and service limits: [Microsoft's current free-offer documentation](https://learn.microsoft.com/en-us/azure/azure-sql/database/free-offer?view=azuresql). Local SQL Server is sufficient for the included integration suite. Live Azure and interactive Entra sign-in require an Azure account/database and are not exercised by local tests.
