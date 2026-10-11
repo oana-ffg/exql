@@ -57,9 +57,13 @@ export default function App() {
   const [filters, setFilters] = useState<Filter[]>([]);
   const [match, setMatch] = useState<"all" | "any">("all");
   const [edits, setEdits] = useState<Edit[]>([]);
-  const [sql, setSql] = useStored("scratch", "");
+  const [sql, setSql, scratchReady] = useStored("scratch", "");
   const [selection, setSelection] = useState("");
-  const [library, setLibrary] = useStored("library", emptyLibrary);
+  const [library, setLibrary, libraryReady] = useStored(
+    "library",
+    emptyLibrary,
+  );
+  const workspaceReady = scratchReady && libraryReady;
   const [savedId, setSavedId] = useState<string | null>(null);
   const [saveOpen, setSaveOpen] = useState(false);
   const [queryResponse, setQueryResponse] = useState<QueryResponse | null>(
@@ -81,7 +85,7 @@ export default function App() {
   const savedQuery = library.queries.find((query) => query.id === savedId);
 
   useLayoutEffect(() => {
-    window.exqlWorkspaceReady = true;
+    window.exqlWorkspaceReady = workspaceReady;
     window.exqlDirty = edits.length > 0 || !!busy;
     const handler = (event: BeforeUnloadEvent) => {
       if (edits.length || busy) {
@@ -93,7 +97,7 @@ export default function App() {
       window.exqlWorkspaceReady = false;
       window.removeEventListener("beforeunload", handler);
     };
-  }, [edits.length, busy]);
+  }, [edits.length, busy, workspaceReady]);
   useEffect(() => {
     const handler = (event: Event) =>
       setError((event as CustomEvent<string>).detail);
@@ -302,6 +306,17 @@ export default function App() {
       ...library,
       folders: library.folders.filter((folder) => folder.id !== id),
     });
+  }
+
+  if (!workspaceReady) {
+    return (
+      <main className="sql-editor hint" role="status">
+        <p>{error || "Loading saved workspace…"}</p>
+        {error && (
+          <button onClick={() => window.location.reload()}>Retry</button>
+        )}
+      </main>
+    );
   }
 
   return (

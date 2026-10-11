@@ -16,13 +16,16 @@ const failedSaves = new Set<string>();
 // Disk-backed workspace state is independent of the desktop host's randomly assigned port.
 export function useStored<T>(key: "scratch" | "library", fallback: T) {
   const [value, setValue] = useState<T>(fallback);
-  const changed = useRef(false);
+  const [ready, setReady] = useState(false);
   const queue = useRef<Promise<unknown>>(Promise.resolve());
   useEffect(() => {
+    setReady(false);
     const abort = new AbortController();
     request<{ value: T | null }>(`/workspace/${key}`, undefined, abort.signal)
       .then((stored) => {
-        if (!changed.current && stored.value !== null) setValue(stored.value);
+        if (abort.signal.aborted) return;
+        setValue(stored.value ?? fallback);
+        setReady(true);
       })
       .catch((error) => {
         if (!abort.signal.aborted) report(error);
@@ -30,7 +33,12 @@ export function useStored<T>(key: "scratch" | "library", fallback: T) {
     return () => abort.abort();
   }, [key]);
   function update(next: T) {
-    changed.current = true;
+    if (!ready) {
+      report(
+        new Error("Saved workspace has not loaded. Retry before editing."),
+      );
+      return;
+    }
     setValue(next);
     window.exqlPendingWrites = (window.exqlPendingWrites ?? 0) + 1;
     queue.current = queue.current
@@ -45,7 +53,7 @@ export function useStored<T>(key: "scratch" | "library", fallback: T) {
         window.exqlPendingWrites = (window.exqlPendingWrites ?? 1) - 1;
       });
   }
-  return [value, update] as const;
+  return [value, update, ready] as const;
 }
 function report(error: Error) {
   window.dispatchEvent(
