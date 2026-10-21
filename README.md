@@ -92,7 +92,7 @@ npm run test:e2e
 npm run format:check
 ```
 
-The Windows credential tests create randomly named test entries, verify write/read/update/delete and password-free profile persistence, then remove their entries. The browser tests exercise the real SQL Server; no database API is mocked.
+The Windows credential tests create randomly named test entries, verify write/read/update/delete and password-free profile persistence, then remove their entries. The SQL integration tests exercise the real SQL Server. Workspace-loading browser regressions intercept workspace responses to verify delayed loads and failed-load retries without changing saved work.
 
 Optional packaged-desktop checks: launch the extracted portable app with `--automation-port 9223`, then run `node scripts/verify-desktop.mjs`. It saves the Local development demo connection and Browse work items query. Restart the EXE with that flag and run `node scripts/verify-desktop-restart.mjs` to verify persistence and a native download. The debugging port is disabled during normal launches.
 

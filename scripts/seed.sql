@@ -38,7 +38,8 @@ BEGIN
         EmptyText nvarchar(100) NOT NULL,
         Derived AS (Id + 1)
     );
-    INSERT dbo.TypeSamples VALUES (1, 9223372036854775807, 12345678901234567890.123456789012345678, '2026-09-08T12:34:56.1234567+02:00', 0x00FF1080, NULL, N'');
+    INSERT dbo.TypeSamples(Id, LargeInteger, ExactDecimal, EventTime, Payload, NullableText, EmptyText)
+    VALUES (1, 9223372036854775807, 12345678901234567890.123456789012345678, '2026-09-08T12:34:56.1234567+02:00', 0x00FF1080, NULL, N'');
 END;
 -- Additive fixtures also work when ExqlDemo was seeded before these tests.
 IF COL_LENGTH(N'dbo.TypeSamples', N'LegacyDateTime') IS NULL
