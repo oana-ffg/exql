@@ -38,8 +38,20 @@ BEGIN
         EmptyText nvarchar(100) NOT NULL,
         Derived AS (Id + 1)
     );
-    INSERT dbo.TypeSamples VALUES (1, 9223372036854775807, 12345678901234567890.123456789012345678, '2026-09-08T12:34:56.1234567+02:00', 0x00FF1080, NULL, N'');
+    INSERT dbo.TypeSamples(Id, LargeInteger, ExactDecimal, EventTime, Payload, NullableText, EmptyText)
+    VALUES (1, 9223372036854775807, 12345678901234567890.123456789012345678, '2026-09-08T12:34:56.1234567+02:00', 0x00FF1080, NULL, N'');
 END;
+-- Additive fixtures also work when ExqlDemo was seeded before these tests.
+IF COL_LENGTH(N'dbo.TypeSamples', N'LegacyDateTime') IS NULL
+    ALTER TABLE dbo.TypeSamples ADD LegacyDateTime datetime NOT NULL
+        CONSTRAINT DF_TypeSamples_LegacyDateTime DEFAULT '2026-09-08T12:34:56.123';
+IF COL_LENGTH(N'dbo.TypeSamples', N'LegacyMinuteTime') IS NULL
+    ALTER TABLE dbo.TypeSamples ADD LegacyMinuteTime smalldatetime NOT NULL
+        CONSTRAINT DF_TypeSamples_LegacyMinuteTime DEFAULT '2026-09-08T12:34:00';
+IF COL_LENGTH(N'dbo.TypeSamples', N'CalendarDate') IS NULL
+    ALTER TABLE dbo.TypeSamples ADD CalendarDate date NOT NULL
+        CONSTRAINT DF_TypeSamples_CalendarDate DEFAULT '2026-09-08';
+
 GO
 IF OBJECT_ID(N'dbo.OpenWorkItems', N'V') IS NULL
     EXEC(N'CREATE VIEW dbo.OpenWorkItems AS SELECT Id,Title,Status,Priority FROM dbo.WorkItems WHERE Status=N''Open''');

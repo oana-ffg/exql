@@ -14,7 +14,7 @@ public static class SqlValues
         return reader.GetValue(index) switch
         {
             byte[] bytes => "0x" + Convert.ToHexString(bytes),
-            DateTime date => date.ToString("yyyy-MM-ddTHH:mm:ss.fffffff", CultureInfo.InvariantCulture),
+            DateTime date => DateTimeText(date, reader.GetDataTypeName(index)),
             DateTimeOffset date => date.ToString("o", CultureInfo.InvariantCulture),
             bool value => value ? "true" : "false",
             TimeSpan value => value.ToString("c", CultureInfo.InvariantCulture),
@@ -22,6 +22,12 @@ public static class SqlValues
             object value => value.ToString(),
         };
     }
+    internal static string DateTimeText(DateTime value, string sqlType) => value.ToString(sqlType switch
+    {
+        "date" => "yyyy-MM-dd",
+        "datetime" or "smalldatetime" => "yyyy-MM-ddTHH:mm:ss.fff",
+        _ => "yyyy-MM-ddTHH:mm:ss.fffffff",
+    }, CultureInfo.InvariantCulture);
     public static string?[] ReadRow(SqlDataReader reader) => Enumerable.Range(0, reader.FieldCount).Select(i => Read(reader, i)).ToArray();
     public static void WriteJsonRow(Utf8JsonWriter writer, List<Column> columns, string?[] row)
     {

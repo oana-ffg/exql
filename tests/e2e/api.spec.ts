@@ -204,6 +204,46 @@ test("edits commit atomically and stale writes roll back the entire batch", asyn
     expect(restored.status(), await restored.text()).toBe(200);
   }
 });
+test("legacy date values survive an edit round trip through SQL Server", async () => {
+  const request = tableRequest("TypeSamples");
+  const before = await page(request);
+  const row = (grid: GridResult) =>
+    Object.fromEntries(
+      grid.columns.map((column, i) => [column.name, grid.rows[0][i]]),
+    );
+  const original = row(before);
+  expect(original.LegacyDateTime).toBe("2026-09-08T12:34:56.123");
+  expect(original.LegacyMinuteTime).toBe("2026-09-08T12:34:00.000");
+  expect(original.CalendarDate).toBe("2026-09-08");
+  async function edit(
+    current: Record<string, string | null>,
+    value: string | null,
+  ) {
+    return api.post(url("/edit"), {
+      data: {
+        schema: "dbo",
+        table: "TypeSamples",
+        rows: [
+          { original: current, changes: [{ column: "EmptyText", value }] },
+        ],
+      },
+    });
+  }
+  try {
+    // Optimistic concurrency uses all original values, including both legacy
+    // date types. An over-precise string fails SQL datetime conversion here.
+    const changed = await edit(original, "Legacy date round trip");
+    expect(changed.status(), await changed.text()).toBe(200);
+    const current = row(await page(request));
+    expect(current.EmptyText).toBe("Legacy date round trip");
+    expect(current.LegacyDateTime).toBe(original.LegacyDateTime);
+    expect(current.LegacyMinuteTime).toBe(original.LegacyMinuteTime);
+    expect(current.CalendarDate).toBe(original.CalendarDate);
+  } finally {
+    const restored = await edit(row(await page(request)), original.EmptyText);
+    expect(restored.status(), await restored.text()).toBe(200);
+  }
+});
 test("query results support multiple sets, pagination and export without re-execution", async () => {
   const before = await page({
     ...tableRequest(),
