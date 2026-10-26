@@ -343,6 +343,7 @@ test("query editor, result sets, saved folders and query exports", async ({
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   let folderName = `Verification ${Date.now()}`;
   await connect(page);
+  await page.getByRole("button", { name: "SQL scripts", exact: true }).click();
   page.once("dialog", (dialog) => dialog.accept(folderName));
   await page
     .getByRole("button", { name: "New query folder", exact: true })
@@ -392,6 +393,7 @@ test("query editor, result sets, saved folders and query exports", async ({
     .poll(() => page.evaluate(() => window.exqlPendingWrites ?? 0))
     .toBe(0);
   await page.reload();
+  await page.getByRole("button", { name: "SQL scripts", exact: true }).click();
   await expect(
     page.getByRole("button", { name: "Work item sample", exact: true }),
   ).toBeVisible();

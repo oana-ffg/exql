@@ -30,6 +30,8 @@ test("paste, save, rename, and reconnect with a vaulted connection string", asyn
     id = profile.id;
     expect(profile.connection.connectionString).toBeNull();
     await expect(page.getByText("Connected", { exact: true })).toBeVisible();
+    await expect(page.getByRole("tab", { name, exact: true })).toBeVisible();
+    await expect(page.locator(".connection-card strong")).toHaveText(name);
     await page.getByRole("button", { name: "WorkItems", exact: true }).click();
     await expect(page.locator("tbody tr")).toHaveCount(200);
     await page.getByRole("button", { name: "Disconnect", exact: true }).click();
@@ -62,6 +64,12 @@ test("paste, save, rename, and reconnect with a vaulted connection string", asyn
       .getByRole("button", { name: `Connect to ${name} renamed`, exact: true })
       .click();
     await expect(page.getByText("Connected", { exact: true })).toBeVisible();
+    await expect(
+      page.getByRole("tab", { name: name + " renamed", exact: true }),
+    ).toBeVisible();
+    await expect(page.locator(".connection-card strong")).toHaveText(
+      name + " renamed",
+    );
     await page
       .getByRole("button", { name: "TypeSamples", exact: true })
       .click();

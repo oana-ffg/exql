@@ -43,6 +43,7 @@ test("waits for both workspace documents before enabling edits", async ({
   pending.shift()!();
   await expect(page.getByRole("status")).toBeVisible();
   pending.shift()!();
+  await page.getByRole("button", { name: "SQL scripts", exact: true }).click();
   await expect(
     page.getByText("Saved before restart", { exact: true }),
   ).toBeVisible();
@@ -81,6 +82,7 @@ test("a failed load keeps edits blocked until a successful retry", async ({
 
   fail = false;
   await page.getByRole("button", { name: "Retry", exact: true }).click();
+  await page.getByRole("button", { name: "SQL scripts", exact: true }).click();
   await expect(
     page.getByText("Saved before restart", { exact: true }),
   ).toBeVisible();

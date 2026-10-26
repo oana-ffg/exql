@@ -51,6 +51,7 @@ export interface ConnectionProfile {
 }
 export interface Session {
   id: string;
+  name: string;
   server: string;
   catalog: TableId[];
   database: string;

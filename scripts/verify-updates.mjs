@@ -274,6 +274,7 @@ try {
       before,
       `${file} survives update unchanged`,
     );
+  await page.getByRole("button", { name: "SQL scripts", exact: true }).click();
   await expect(
     page.getByRole("button", { name: "Update verification", exact: true }),
   ).toBeVisible();

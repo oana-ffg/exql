@@ -17,6 +17,7 @@ const page =
     .filter((page) => page.url().startsWith("http://127.0.0.1:"))
     .at(-1);
 assert(page);
+await page.getByRole("button", { name: "SQL scripts", exact: true }).click();
 await page
   .getByRole("complementary")
   .getByRole("button", { name: "Browse work items", exact: true })

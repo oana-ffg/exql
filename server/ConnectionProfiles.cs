@@ -16,6 +16,10 @@ public sealed class ConnectionProfiles(AppPaths paths)
     {
         lock (gate) return Load();
     }
+    public ConnectionProfile Get(string id)
+    {
+        lock (gate) return Load().Find(p => p.Id == id) ?? throw new InputException("Saved connection not found.", 404);
+    }
     private List<ConnectionProfile> Load() => File.Exists(path)
         ? JsonSerializer.Deserialize<List<ConnectionProfile>>(File.ReadAllText(path)) ?? [] : [];
     private void Write(List<ConnectionProfile> profiles)
@@ -69,7 +73,7 @@ public sealed class ConnectionProfiles(AppPaths paths)
     {
         lock (gate)
         {
-            var profile = Load().Find(p => p.Id == id) ?? throw new InputException("Saved connection not found.", 404);
+            var profile = Get(id);
             return profile.Connection with
             {
                 Password = profile.Connection.Authentication == "sql" ? WindowsCredentials.Read(id) : null,

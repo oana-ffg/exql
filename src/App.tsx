@@ -1,4 +1,10 @@
-﻿import { useCallback, useEffect, useLayoutEffect, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { Database, LoaderCircle, Plus, X } from "lucide-react";
 import { request } from "./api";
 import { ConnectionDialog } from "./ConnectionDialog";
@@ -43,9 +49,23 @@ export default function App() {
   const [connecting, setConnecting] = useState(false);
   const [closing, setClosing] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const activeTab = useRef<HTMLButtonElement>(null);
+  const tabList = useRef<HTMLDivElement>(null);
   const drafts = draftsFrom(scratch);
   const active = drafts.find((draft) => draft.id === activeId) ?? drafts[0];
   const ready = scratchReady && libraryReady;
+  useLayoutEffect(() => {
+    const revealActiveTab = () =>
+      activeTab.current?.parentElement?.scrollIntoView({
+        block: "nearest",
+        inline: "nearest",
+      });
+    revealActiveTab();
+    if (!tabList.current) return;
+    const observer = new ResizeObserver(revealActiveTab);
+    observer.observe(tabList.current);
+    return () => observer.disconnect();
+  }, [active.id, ready]);
   const dirty =
     connecting ||
     !!closing ||
@@ -83,7 +103,7 @@ export default function App() {
       const id = sessions[active.id] ? crypto.randomUUID() : active.id;
       setScratch((current) => {
         const tabs = draftsFrom(current);
-        const name = `${session.database} · ${session.server}`;
+        const name = session.name;
         return id === active.id
           ? tabs.map((tab) => (tab.id === id ? { ...tab, name } : tab))
           : [...tabs, { id, name, sql: "" }];
@@ -154,7 +174,7 @@ export default function App() {
     <div className="application">
       <header className="app-toolbar">
         <nav className="connection-tabs" aria-label="Database workspaces">
-          <div role="tablist" aria-label="Database connections">
+          <div ref={tabList} role="tablist" aria-label="Database connections">
             {drafts.map((draft) => (
               <div
                 className={`connection-tab ${active.id === draft.id ? "active" : ""}`}
@@ -162,6 +182,7 @@ export default function App() {
               >
                 <button
                   role="tab"
+                  ref={active.id === draft.id ? activeTab : undefined}
                   id={`tab-${draft.id}`}
                   aria-controls={`workspace-${draft.id}`}
                   aria-selected={active.id === draft.id}
@@ -190,14 +211,21 @@ export default function App() {
                     setActiveId(next.id);
                     document.getElementById(`tab-${next.id}`)?.focus();
                   }}
-                  title={`${draft.name}${activity[draft.id]?.busy ? ` · ${activity[draft.id].busy}` : ""}`}
+                  title={[
+                    draft.name,
+                    sessions[draft.id] &&
+                      `${sessions[draft.id]!.database} · ${sessions[draft.id]!.server}`,
+                    activity[draft.id]?.busy,
+                  ]
+                    .filter(Boolean)
+                    .join("\n")}
                 >
                   {activity[draft.id]?.busy ? (
                     <LoaderCircle size={14} className="spin" />
                   ) : (
                     <Database size={14} />
                   )}
-                  <span>{draft.name}</span>
+                  <span className="connection-tab-name">{draft.name}</span>
                   {!!activity[draft.id]?.edits && (
                     <span title="Unsaved cell edits">●</span>
                   )}

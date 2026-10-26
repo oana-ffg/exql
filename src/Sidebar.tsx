@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import {
   ChevronDown,
   Code2,
+  Database,
   FileCode2,
   Folder,
   FolderPlus,
@@ -58,6 +59,7 @@ export function Sidebar({
   disabled: boolean;
 }) {
   const [search, setSearch] = useState("");
+  const [panel, setPanel] = useState<"database" | "scripts">("database");
   const importInput = useRef<HTMLInputElement>(null);
   const context = useContextMenu<ExplorerMenu>();
   function menuActions(target: ExplorerMenu): MenuAction[] {
@@ -135,13 +137,18 @@ export function Sidebar({
       </div>
       <button
         className="connection-card"
+        title={
+          session
+            ? `${session.name}\n${session.database}\n${session.server}`
+            : "Database connections"
+        }
         onClick={onConnect}
         disabled={disabled}
       >
         <span className={`connection-dot ${session ? "connected" : ""}`} />
         <div>
-          <strong>{session?.database ?? "No connection"}</strong>
-          <span>{session ? session.server : "Connect to SQL Server"}</span>
+          <strong>{session?.name ?? "No connection"}</strong>
+          <span>{session ? session.database : "Connect to SQL Server"}</span>
         </div>
         <ChevronDown size={14} />
       </button>
@@ -149,96 +156,123 @@ export function Sidebar({
         <Code2 size={16} />
         New query<span>SQL</span>
       </button>
-      <div className="sidebar-scroll">
-        <div className="section-heading">
-          DATABASE EXPLORER<span>{session?.catalog.length ?? 0}</span>
-          <button
-            className="icon-button"
-            aria-label="Refresh database explorer"
-            disabled={!session || disabled}
-            onClick={onRefresh}
-          >
-            <RefreshCw size={13} />
-          </button>
-        </div>
-        <label className="search-box">
-          <Search size={14} />
-          <input
-            aria-label="Find a table"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-          <span className="search-caption" hidden={search.length > 0}>
-            Find a table
-          </span>
-        </label>
-        {!session && (
-          <p className="sidebar-hint">
-            Tables and views appear here after connecting.
-          </p>
-        )}
-        {session && tables.length === 0 && (
-          <p className="sidebar-hint">No tables or views found.</p>
-        )}
-        {schemas.map((schema) => (
-          <details key={schema} open className="tree-folder">
-            <summary>
-              <Folder size={15} />
-              <span>{schema}</span>
-              <small>
-                {tables.filter((table) => table.schema === schema).length}
-              </small>
-            </summary>
-            {tables
-              .filter((table) => table.schema === schema)
-              .map((table) => (
-                <button
-                  key={table.name}
-                  disabled={disabled}
-                  className={`tree-item ${active?.schema === schema && active.name === table.name ? "active" : ""}`}
-                  onClick={() => onTable(table)}
-                  {...context.bind({ kind: "table", table })}
-                >
-                  <Table2 size={14} />
-                  <span>{table.name}</span>
-                  {table.kind === "view" && <small>view</small>}
-                </button>
-              ))}
-          </details>
-        ))}
-        <div className="section-heading saved-heading">
-          SAVED QUERIES
-          <button
-            className="icon-button"
-            aria-label="New query folder"
-            onClick={onFolder}
-          >
-            <FolderPlus size={15} />
-          </button>
-        </div>
+      <button
+        className="import-folder"
+        disabled={disabled}
+        onClick={() => {
+          setPanel("scripts");
+          importInput.current?.click();
+        }}
+      >
+        <FolderInput size={15} /> Import SQL folder
+      </button>
+      <input
+        ref={(input) => {
+          importInput.current = input;
+          if (input) input.webkitdirectory = true;
+        }}
+        type="file"
+        aria-label="Import SQL folder"
+        hidden
+        multiple
+        onChange={(event) => {
+          const files = Array.from(event.currentTarget.files ?? []);
+          event.currentTarget.value = "";
+          if (files.length) {
+            setPanel("scripts");
+            onImport(files);
+          }
+        }}
+      />
+      <div className="sidebar-sections" aria-label="Explorer sections">
         <button
-          className="import-folder"
-          disabled={disabled}
-          onClick={() => importInput.current?.click()}
+          aria-pressed={panel === "database"}
+          onClick={() => setPanel("database")}
         >
-          <FolderInput size={15} /> Import SQL folder
+          <Database size={14} /> Database
         </button>
-        <input
-          ref={(input) => {
-            importInput.current = input;
-            if (input) input.webkitdirectory = true;
-          }}
-          type="file"
-          aria-label="Import SQL folder"
-          hidden
-          multiple
-          onChange={(event) => {
-            const files = Array.from(event.currentTarget.files ?? []);
-            event.currentTarget.value = "";
-            if (files.length) onImport(files);
-          }}
-        />
-        {renderFolders("")}
+        <button
+          aria-pressed={panel === "scripts"}
+          onClick={() => setPanel("scripts")}
+        >
+          <Folder size={14} /> SQL scripts
+        </button>
+      </div>
+      <div className="sidebar-scroll">
+        {panel === "database" ? (
+          <>
+            <div className="section-heading">
+              DATABASE EXPLORER<span>{session?.catalog.length ?? 0}</span>
+              <button
+                className="icon-button"
+                aria-label="Refresh database explorer"
+                disabled={!session || disabled}
+                onClick={onRefresh}
+              >
+                <RefreshCw size={13} />
+              </button>
+            </div>
+            <label className="search-box">
+              <Search size={14} />
+              <input
+                aria-label="Find a table"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+              <span className="search-caption" hidden={search.length > 0}>
+                Find a table
+              </span>
+            </label>
+            {!session && (
+              <p className="sidebar-hint">
+                Tables and views appear here after connecting.
+              </p>
+            )}
+            {session && tables.length === 0 && (
+              <p className="sidebar-hint">No tables or views found.</p>
+            )}
+            {schemas.map((schema) => (
+              <details key={schema} open className="tree-folder">
+                <summary>
+                  <Folder size={15} />
+                  <span>{schema}</span>
+                  <small>
+                    {tables.filter((table) => table.schema === schema).length}
+                  </small>
+                </summary>
+                {tables
+                  .filter((table) => table.schema === schema)
+                  .map((table) => (
+                    <button
+                      key={table.name}
+                      disabled={disabled}
+                      className={`tree-item ${active?.schema === schema && active.name === table.name ? "active" : ""}`}
+                      onClick={() => onTable(table)}
+                      {...context.bind({ kind: "table", table })}
+                    >
+                      <Table2 size={14} />
+                      <span>{table.name}</span>
+                      {table.kind === "view" && <small>view</small>}
+                    </button>
+                  ))}
+              </details>
+            ))}
+          </>
+        ) : (
+          <>
+            <div className="section-heading saved-heading">
+              SAVED QUERIES
+              <button
+                className="icon-button"
+                aria-label="New query folder"
+                onClick={onFolder}
+              >
+                <FolderPlus size={15} />
+              </button>
+            </div>
+            {renderFolders("")}
+          </>
+        )}
       </div>
       {context.menu && (
         <ContextMenu

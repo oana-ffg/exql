@@ -222,6 +222,7 @@ test("imports nested SQL folders without overwriting saved queries and survives 
     .poll(() => page.evaluate(() => window.exqlPendingWrites))
     .toBe(0);
   await page.reload();
+  await page.getByRole("button", { name: "SQL scripts", exact: true }).click();
   await page.getByRole("button", { name: "Root.sql", exact: true }).click();
   await expect(page.locator(".cm-content")).toHaveText("SELECT N'æøå 日本語';");
   await expect(

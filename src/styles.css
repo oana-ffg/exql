@@ -219,6 +219,9 @@ kbd {
   flex-shrink: 0;
 }
 .connection-card {
+  width: calc(100% - 26px);
+  min-width: 0;
+  overflow: hidden;
   margin: 0 13px;
   padding: 11px;
   background: #1b2531;
@@ -235,9 +238,13 @@ kbd {
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 13px;
 }
 .connection-card div span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 10px;
   color: var(--muted);
   display: block;
@@ -256,7 +263,7 @@ kbd {
   box-shadow: 0 0 8px #9de6b522;
 }
 .new-query {
-  margin: 15px 13px 20px;
+  margin: 15px 13px 8px;
   justify-content: flex-start;
   background: transparent;
   border-color: #2d3745;
@@ -270,6 +277,7 @@ kbd {
   border-radius: 3px;
 }
 .sidebar-scroll {
+  min-height: 0;
   overflow: auto;
   flex: 1;
   padding: 0 12px 22px;
@@ -388,7 +396,6 @@ kbd {
   color: #91d8ad;
 }
 .saved-heading {
-  margin-top: 30px;
   padding-bottom: 9px;
 }
 .saved-query {
@@ -434,6 +441,7 @@ main {
   color: #8191a7;
   font-size: 11px;
   min-width: 0;
+  overflow: hidden;
 }
 .breadcrumb strong {
   font-weight: 500;
@@ -446,6 +454,7 @@ main {
   color: #4b576a;
 }
 .connection-status {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 7px;
@@ -1095,6 +1104,7 @@ dialog fieldset label.check-label {
   padding: 8px;
 }
 .profile-select > span {
+  flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -1104,12 +1114,14 @@ dialog fieldset label.check-label {
   font-size: 11px;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .profile-select small {
   font-size: 9px;
   color: #8a9fb7;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .new-connection-button {
   width: 100%;
@@ -1141,12 +1153,17 @@ dialog fieldset label.check-label {
   padding: 5px 10px;
 }
 .connection-tabs [role="tablist"] {
+  flex: 0 1 auto;
   display: flex;
   overflow-x: auto;
   min-width: 0;
   gap: 4px;
 }
 .connection-tab {
+  flex: 0 0 210px;
+  width: 210px;
+  min-width: 0;
+  overflow: hidden;
   display: flex;
   align-items: center;
   border: 1px solid transparent;
@@ -1157,15 +1174,20 @@ dialog fieldset label.check-label {
   border-color: #4a625a;
 }
 .connection-tab [role="tab"] {
+  flex: 1;
+  min-width: 0;
   background: transparent;
   border: 0;
-  max-width: 260px;
 }
-.connection-tab [role="tab"] > span:first-of-type {
+.connection-tab-name {
+  min-width: 0;
+  flex: 1;
+  text-align: left;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .add-connection {
+  flex-shrink: 0;
   background: transparent;
 }
 .update-controls {
@@ -1182,11 +1204,38 @@ dialog fieldset label.check-label {
   grid-column: 1 / -1;
 }
 .import-folder {
-  width: calc(100% - 8px);
-  margin: 0 4px 12px;
+  width: calc(100% - 26px);
+  margin: 0 13px 12px;
   justify-content: flex-start;
   font-size: 12px;
 }
 .nested-folders {
   padding-left: 12px;
+}
+.sidebar-sections {
+  display: flex;
+  gap: 4px;
+  padding: 0 13px 16px;
+}
+.sidebar-sections button {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  padding: 7px 5px;
+  font-size: 12px;
+}
+.sidebar-sections button[aria-pressed="true"] {
+  background: #253444;
+  border-color: #4a625a;
+  color: var(--accent);
+}
+.breadcrumb > span:not(.slash),
+.breadcrumb > strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.breadcrumb > span:not(.slash) {
+  max-width: min(30vw, 350px);
 }
