@@ -3,8 +3,8 @@ using Microsoft.Data.SqlClient;
 
 namespace Exql;
 
-public sealed record ConnectionProfile(string Id, string Name, string Folder, ConnectionRequest Connection);
-public sealed record SaveProfileRequest(string? Id, string Name, string Folder, ConnectionRequest Connection, bool KeepPassword = false);
+public sealed record ConnectionProfile(string Id, string Name, string Folder, ConnectionRequest Connection, string? Color = null);
+public sealed record SaveProfileRequest(string? Id, string Name, string Folder, ConnectionRequest Connection, bool KeepPassword = false, string? Color = null);
 
 public sealed class ConnectionProfiles(AppPaths paths)
 {
@@ -20,8 +20,14 @@ public sealed class ConnectionProfiles(AppPaths paths)
     {
         lock (gate) return Load().Find(p => p.Id == id) ?? throw new InputException("Saved connection not found.", 404);
     }
-    private List<ConnectionProfile> Load() => File.Exists(path)
-        ? JsonSerializer.Deserialize<List<ConnectionProfile>>(File.ReadAllText(path)) ?? [] : [];
+    private List<ConnectionProfile> Load()
+    {
+        var profiles = File.Exists(path) ? JsonSerializer.Deserialize<List<ConnectionProfile>>(File.ReadAllText(path)) ?? [] : [];
+        for (var i = 0; i < profiles.Count; i++)
+            profiles[i] = profiles[i] with { Color = profiles[i].Color is { } color
+                ? ConnectionColors.Normalize(color) : ConnectionColors.Next(profiles.Select(profile => profile.Color)) };
+        return profiles;
+    }
     private void Write(List<ConnectionProfile> profiles)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
@@ -38,6 +44,8 @@ public sealed class ConnectionProfiles(AppPaths paths)
             var profiles = Load();
             var existing = request.Id is null ? null : profiles.Find(p => p.Id == request.Id) ?? throw new InputException("Saved connection not found.", 404);
             var id = existing?.Id ?? Guid.NewGuid().ToString("N");
+            var color = request.Color is not null ? ConnectionColors.Normalize(request.Color)
+                : existing?.Color ?? ConnectionColors.Next(profiles.Select(profile => profile.Color));
             var connection = request.Connection;
             if (connection.Authentication == "connectionString")
             {
@@ -62,7 +70,7 @@ public sealed class ConnectionProfiles(AppPaths paths)
                 }
                 else if (existing?.Connection.Authentication is "sql" or "connectionString") WindowsCredentials.Delete(id);
             }
-            var profile = new ConnectionProfile(id, request.Name.Trim(), request.Folder.Trim(), connection with { Password = null, ConnectionString = null });
+            var profile = new ConnectionProfile(id, request.Name.Trim(), request.Folder.Trim(), connection with { Password = null, ConnectionString = null }, color);
             profiles.RemoveAll(p => p.Id == id);
             profiles.Add(profile);
             Write(profiles);

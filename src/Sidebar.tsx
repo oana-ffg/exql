@@ -17,6 +17,7 @@ import type { Library, SavedQuery, Session, TableId } from "./types";
 import { ContextMenu, useContextMenu, type MenuAction } from "./ContextMenu";
 import { copyText } from "./clipboard";
 import { quoteIdentifier } from "./format";
+import { connectionColorStyle } from "./connectionColors";
 
 type ExplorerMenu =
   | { kind: "table"; table: TableId }
@@ -137,6 +138,7 @@ export function Sidebar({
       </div>
       <button
         className="connection-card"
+        style={connectionColorStyle(session?.color)}
         title={
           session
             ? `${session.name}\n${session.database}\n${session.server}`

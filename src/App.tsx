@@ -11,12 +11,19 @@ import { ConnectionDialog } from "./ConnectionDialog";
 import { UpdateNotice } from "./UpdateNotice";
 import { Workspace } from "./Workspace";
 import { useStored } from "./storage";
-import type { Connection, Library, Session } from "./types";
+import type { Connection, ConnectionProfile, Library, Session } from "./types";
+import {
+  connectionColors,
+  connectionColorStyle,
+  nextConnectionColor,
+} from "./connectionColors";
 
 interface Draft {
   id: string;
   name: string;
   sql: string;
+  color?: string;
+  profileId?: string | null;
 }
 interface Activity {
   busy: string;
@@ -25,7 +32,7 @@ interface Activity {
 type Scratch = string | Draft[];
 const emptyLibrary: Library = { folders: [], queries: [] };
 const draftsFrom = (scratch: Scratch): Draft[] =>
-  typeof scratch === "string" || !scratch.length
+  (typeof scratch === "string" || !scratch.length
     ? [
         {
           id: "scratch",
@@ -33,7 +40,12 @@ const draftsFrom = (scratch: Scratch): Draft[] =>
           sql: typeof scratch === "string" ? scratch : "",
         },
       ]
-    : scratch;
+    : scratch
+  ).map((draft, index) => ({
+    ...draft,
+    color:
+      draft.color ?? connectionColors[index % connectionColors.length].value,
+  }));
 
 export default function App() {
   // Read the legacy single SQL draft without rewriting saved work on load.
@@ -93,20 +105,34 @@ export default function App() {
     setActivity((current) => ({ ...current, [id]: next }));
   }, []);
 
-  async function connect(connection: Connection | string) {
+  async function connect(
+    connection: Connection | string,
+    preferredColor?: string,
+  ) {
     setConnecting(true);
     try {
-      const session =
+      const connected =
         typeof connection === "string"
           ? await request<Session>(`/profiles/${connection}/connect`, {})
           : await request<Session>("/connect", connection);
+      const session = {
+        ...connected,
+        color:
+          connected.color ??
+          preferredColor ??
+          nextConnectionColor(drafts.map((draft) => draft.color)),
+      };
       const id = sessions[active.id] ? crypto.randomUUID() : active.id;
       setScratch((current) => {
         const tabs = draftsFrom(current);
         const name = session.name;
+        const color = session.color;
+        const profileId = session.profileId;
         return id === active.id
-          ? tabs.map((tab) => (tab.id === id ? { ...tab, name } : tab))
-          : [...tabs, { id, name, sql: "" }];
+          ? tabs.map((tab) =>
+              tab.id === id ? { ...tab, name, color, profileId } : tab,
+            )
+          : [...tabs, { id, name, color, profileId, sql: "" }];
       });
       setSessions((current) => ({ ...current, [id]: session }));
       setActiveId(id);
@@ -114,6 +140,26 @@ export default function App() {
     } finally {
       setConnecting(false);
     }
+  }
+  function updateProfile(profile: ConnectionProfile) {
+    if (drafts.some((draft) => draft.profileId === profile.id))
+      setScratch((current) =>
+        draftsFrom(current).map((draft) =>
+          draft.profileId === profile.id
+            ? { ...draft, name: profile.name, color: profile.color }
+            : draft,
+        ),
+      );
+    setSessions((current) =>
+      Object.fromEntries(
+        Object.entries(current).map(([id, session]) => [
+          id,
+          session?.profileId === profile.id
+            ? { ...session, name: profile.name, color: profile.color }
+            : session,
+        ]),
+      ),
+    );
   }
   async function closeWorkspace(draft: Draft) {
     if (activity[draft.id]?.busy || closing) return;
@@ -178,6 +224,7 @@ export default function App() {
             {drafts.map((draft) => (
               <div
                 className={`connection-tab ${active.id === draft.id ? "active" : ""}`}
+                style={connectionColorStyle(draft.color)}
                 key={draft.id}
               >
                 <button
@@ -293,6 +340,8 @@ export default function App() {
         <ConnectionDialog
           busy={connecting}
           onConnect={connect}
+          usedColors={drafts.map((draft) => draft.color)}
+          onProfileSaved={updateProfile}
           onClose={() => {
             if (!connecting) setConnectionOpen(false);
           }}

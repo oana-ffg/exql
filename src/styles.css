@@ -224,11 +224,12 @@ kbd {
   overflow: hidden;
   margin: 0 13px;
   padding: 11px;
-  background: #1b2531;
+  background: color-mix(in srgb, var(--connection-color, #8a98ac) 8%, #1b2531);
   justify-content: flex-start;
   gap: 11px;
   text-align: left;
   border-color: #354052;
+  border-left: 3px solid var(--connection-color, #354052);
 }
 .connection-card > div {
   flex: 1;
@@ -1089,10 +1090,11 @@ dialog fieldset label.check-label {
   border: 1px solid #2f3c4e;
   border-radius: 6px;
   margin: 5px 0;
+  border-left: 3px solid var(--connection-color, #354153);
 }
 .profile-row.active {
   background: #26372e;
-  border-color: #59806a;
+  border-color: var(--connection-color, #59806a);
 }
 .profile-select {
   flex: 1;
@@ -1167,11 +1169,13 @@ dialog fieldset label.check-label {
   display: flex;
   align-items: center;
   border: 1px solid transparent;
+  border-top: 3px solid var(--connection-color, #8a98ac);
+  background: color-mix(in srgb, var(--connection-color, #8a98ac) 6%, #141b25);
   border-radius: 5px;
 }
 .connection-tab.active {
-  background: #253444;
-  border-color: #4a625a;
+  background: color-mix(in srgb, var(--connection-color, #8a98ac) 18%, #141b25);
+  border-color: var(--connection-color, #4a625a);
 }
 .connection-tab [role="tab"] {
   flex: 1;
@@ -1238,4 +1242,43 @@ dialog fieldset label.check-label {
 }
 .breadcrumb > span:not(.slash) {
   max-width: min(30vw, 350px);
+}
+.connection-color-picker {
+  margin: 0 0 16px;
+  color: #a7b7cd;
+  font-size: 12px;
+}
+.connection-color-options {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 3px 0;
+}
+.connection-color-options input[type="radio"] {
+  appearance: none;
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  background: var(--connection-color);
+  cursor: pointer;
+}
+.connection-color-options input[type="radio"]:checked {
+  outline: 2px solid #dce5ef;
+  outline-offset: 2px;
+}
+.connection-color-options input[type="radio"]:focus-visible {
+  outline-color: var(--accent);
+}
+.connection-color-options input[type="color"] {
+  width: 36px;
+  height: 28px;
+  padding: 2px;
+  cursor: pointer;
+}
+.profile-select > svg,
+.connection-tab [role="tab"] > svg {
+  color: var(--connection-color, currentColor);
 }

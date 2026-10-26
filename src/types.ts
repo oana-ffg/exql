@@ -46,12 +46,15 @@ export interface Connection {
 export interface ConnectionProfile {
   id: string;
   name: string;
+  color: string;
   folder: string;
   connection: Omit<Connection, "password"> & { password: null };
 }
 export interface Session {
   id: string;
   name: string;
+  color: string | null;
+  profileId: string | null;
   server: string;
   catalog: TableId[];
   database: string;

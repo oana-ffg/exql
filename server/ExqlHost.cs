@@ -54,15 +54,15 @@ public static class ExqlHost
         app.MapPost("/api/profiles", (SaveProfileRequest request, ConnectionProfiles profiles) => profiles.Save(request));
         app.MapDelete("/api/profiles/{id}", (string id, ConnectionProfiles profiles) => { profiles.Delete(id); return Results.NoContent(); });
         app.MapPost("/api/profiles/{id}/connect", async (string id, ConnectionProfiles profiles, Sessions sessions, CancellationToken ct) =>
-            await Connect(profiles.Resolve(id), sessions, ct, profiles.Get(id).Name));
+            await Connect(profiles.Resolve(id), sessions, ct, profiles.Get(id)));
         app.MapPost("/api/connect", (ConnectionRequest request, Sessions sessions, CancellationToken ct) => Connect(request, sessions, ct));
-        static async Task<IResult> Connect(ConnectionRequest request, Sessions sessions, CancellationToken ct, string? name = null)
+        static async Task<IResult> Connect(ConnectionRequest request, Sessions sessions, CancellationToken ct, ConnectionProfile? profile = null)
         {
             var connectionString = Sessions.BuildConnectionString(request);
             await using var connection = new SqlConnection(connectionString);
             await connection.OpenAsync(ct);
             var catalog = await Database.Catalog(connection, ct);
-            return Results.Ok(new { id = sessions.Add(connectionString), name = name ?? connection.Database, catalog, database = connection.Database, server = connection.DataSource, serverVersion = connection.ServerVersion });
+            return Results.Ok(new { id = sessions.Add(connectionString), name = profile?.Name ?? connection.Database, color = profile?.Color, profileId = profile?.Id, catalog, database = connection.Database, server = connection.DataSource, serverVersion = connection.ServerVersion });
         }
 
         var api = app.MapGroup("/api/sessions/{id}");

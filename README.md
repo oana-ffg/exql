@@ -40,7 +40,7 @@ JSON exports preserve numeric digits, booleans, NULL, Unicode, and empty strings
 
 ## Saved connections and local data
 
-Multiple connections can be named and grouped into folders in the connection manager. Save only stores a profile without connecting; Save & connect stores it and opens a session. Edit an existing profile to change settings or its password, or use its arrow to reconnect with its saved credential.
+Multiple connections can be named and grouped into folders in the connection manager. Each connection has a color shown on its tab, connection card, and saved profile. Choose a preset or custom **Connection color** in Database connections; **Save only** updates colors in open workspaces immediately. Existing profiles receive distinct defaults, and colors are retained across restarts. Save only stores a profile without connecting; Save & connect stores it and opens a session. Edit an existing profile to change settings or its password, or use its arrow to reconnect with its saved credential.
 
 **Add connection** opens another database workspace while keeping existing connections open. Tabs and connection cards show the saved connection name, or the database name for unsaved connections; hover to see the database and server. Each workspace keeps its table, filters, staged cell edits, SQL editor, and results when you switch tabs; queries can run in different workspaces at the same time. Disconnect affects only the selected workspace. Closing a workspace disconnects its session and asks before discarding a SQL draft or staged edits. SQL drafts in all open workspaces survive an app restart; database sessions must be reconnected after restarting. Update restart guards include running work and staged edits in inactive workspaces.
 

@@ -10,6 +10,11 @@ import {
 import { Modal } from "./Modal";
 import { request } from "./api";
 import type { Connection, ConnectionProfile } from "./types";
+import {
+  connectionColors,
+  connectionColorStyle,
+  nextConnectionColor,
+} from "./connectionColors";
 
 const defaults: Connection = {
   server: "localhost",
@@ -24,16 +29,21 @@ export function ConnectionDialog({
   busy,
   onConnect,
   onClose,
+  usedColors,
+  onProfileSaved,
 }: {
   busy: boolean;
-  onConnect: (connection: Connection | string) => Promise<void>;
+  onConnect: (connection: Connection | string, color?: string) => Promise<void>;
   onClose: () => void;
+  usedColors: (string | undefined)[];
+  onProfileSaved: (profile: ConnectionProfile) => void;
 }) {
   const [form, setForm] = useState<Connection>(defaults);
   const [profiles, setProfiles] = useState<ConnectionProfile[]>([]);
   const [id, setId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [folder, setFolder] = useState("");
+  const [color, setColor] = useState<string | null>(null);
   const [remember, setRemember] = useState(true);
   const [keepPassword, setKeepPassword] = useState(false);
   const [showString, setShowString] = useState(false);
@@ -41,6 +51,12 @@ export function ConnectionDialog({
   const [error, setError] = useState("");
   const disabled = busy || pending;
   const stringMode = form.authentication === "connectionString";
+  const selectedColor =
+    color ??
+    nextConnectionColor([
+      ...usedColors,
+      ...profiles.map((profile) => profile.color),
+    ]);
   useEffect(() => {
     const abort = new AbortController();
     request<ConnectionProfile[]>("/profiles", undefined, abort.signal)
@@ -58,6 +74,7 @@ export function ConnectionDialog({
     setForm(defaults);
     setName("");
     setFolder("");
+    setColor(null);
     setKeepPassword(false);
     setShowString(false);
     setRemember(true);
@@ -66,7 +83,7 @@ export function ConnectionDialog({
   async function connectSaved(profile: ConnectionProfile) {
     setError("");
     try {
-      await onConnect(profile.id);
+      await onConnect(profile.id, profile.color);
     } catch (error) {
       setError((error as Error).message);
     }
@@ -78,12 +95,15 @@ export function ConnectionDialog({
       folder,
       connection: form,
       keepPassword,
+      color: selectedColor,
     });
     setProfiles((current) => [
       ...current.filter((item) => item.id !== profile.id),
       profile,
     ]);
     setId(profile.id);
+    setColor(profile.color);
+    onProfileSaved(profile);
     setKeepPassword(form.authentication === "sql" || stringMode);
     setForm({ ...profile.connection, password: "", connectionString: "" });
     return profile.id;
@@ -109,6 +129,7 @@ export function ConnectionDialog({
                 .map((profile) => (
                   <div
                     className={`profile-row ${id === profile.id ? "active" : ""}`}
+                    style={connectionColorStyle(profile.color)}
                     key={profile.id}
                   >
                     <button
@@ -125,6 +146,7 @@ export function ConnectionDialog({
                         });
                         setName(profile.name);
                         setFolder(profile.folder);
+                        setColor(profile.color ?? null);
                         setKeepPassword(
                           profile.connection.authentication === "sql" ||
                             profile.connection.authentication ===
@@ -207,7 +229,7 @@ export function ConnectionDialog({
           setError("");
           setPending(true);
           try {
-            await onConnect(remember ? await save() : form);
+            await onConnect(remember ? await save() : form, selectedColor);
           } catch (error) {
             setError((error as Error).message);
           } finally {
@@ -223,6 +245,33 @@ export function ConnectionDialog({
           </div>
         </div>
         <fieldset disabled={disabled}>
+          <div className="connection-color-picker">
+            <div role="radiogroup" aria-label="Connection color">
+              <span>Connection color</span>
+              <div className="connection-color-options">
+                {connectionColors.map((option) => (
+                  <input
+                    type="radio"
+                    name="connection-color"
+                    key={option.value}
+                    aria-label={option.name}
+                    title={option.name}
+                    value={option.value}
+                    checked={selectedColor === option.value}
+                    onChange={() => setColor(option.value)}
+                    style={connectionColorStyle(option.value)}
+                  />
+                ))}
+                <input
+                  type="color"
+                  aria-label="Custom connection color"
+                  title="Custom connection color"
+                  value={selectedColor}
+                  onChange={(event) => setColor(event.target.value)}
+                />
+              </div>
+            </div>
+          </div>
           <label className="check-label">
             <input
               type="checkbox"
