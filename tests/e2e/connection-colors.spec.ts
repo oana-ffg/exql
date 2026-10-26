@@ -87,22 +87,29 @@ test("connection colors persist and update open workspaces without reconnecting"
         exact: true,
       })
       .click();
-    await expect(
-      page.getByRole("radio", { name: "Blue", exact: true }),
-    ).toBeChecked();
-    await page.getByRole("radio", { name: "Rose", exact: true }).check();
+    // Colors saved before the RAG palette remain editable as custom colors.
+    await expect(page.getByLabel("Custom connection color")).toHaveValue(
+      "#89b4fa",
+    );
+    await expect(page.getByRole("radio", { checked: true })).toHaveCount(0);
+    for (const option of connectionColors) {
+      await page.getByRole("radio", { name: option.name, exact: true }).check();
+      await expect(page.getByLabel("Custom connection color")).toHaveValue(
+        option.value,
+      );
+    }
     await page.screenshot({ path: "artifacts/connection-color-picker.png" });
     await page.getByRole("button", { name: "Save only", exact: true }).click();
     await page
       .getByRole("button", { name: "Close dialog", exact: true })
       .click();
-    const rose = connectionColors.find(
-      (option) => option.name === "Rose",
+    const darkRed = connectionColors.find(
+      (option) => option.name === "Dark red",
     )!.value;
-    await expect.poll(() => colorOf(".connection-tab.active")).toBe(rose);
+    await expect.poll(() => colorOf(".connection-tab.active")).toBe(darkRed);
     await expect
       .poll(() => colorOf(".app-shell:not([hidden]) .connection-card"))
-      .toBe(rose);
+      .toBe(darkRed);
     await expect(page.getByRole("tabpanel").locator(".cm-content")).toHaveText(
       "SELECT 7;",
     );
@@ -112,7 +119,7 @@ test("connection colors persist and update open workspaces without reconnecting"
       (await saved.json()).find(
         (profile: { id: string }) => profile.id === ids[0],
       ).color,
-    ).toBe(rose);
+    ).toBe(darkRed);
     await page.screenshot({ path: "artifacts/colored-connections.png" });
     await expect
       .poll(() => page.evaluate(() => window.exqlPendingWrites))
@@ -121,7 +128,7 @@ test("connection colors persist and update open workspaces without reconnecting"
     await expect(
       page.getByRole("tab", { name: `${name} 1`, exact: true }),
     ).toBeVisible();
-    await expect.poll(() => colorOf(".connection-tab.active")).toBe(rose);
+    await expect.poll(() => colorOf(".connection-tab.active")).toBe(darkRed);
     await page
       .getByRole("button", { name: "Add connection", exact: true })
       .click();
@@ -130,7 +137,7 @@ test("connection colors persist and update open workspaces without reconnecting"
       .click();
     await expect
       .poll(() => colorOf(".app-shell:not([hidden]) .connection-card"))
-      .toBe(rose);
+      .toBe(darkRed);
   } finally {
     for (const id of sessions)
       await request.delete(`/api/sessions/${id}`, { headers });
