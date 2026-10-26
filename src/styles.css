@@ -187,7 +187,8 @@ kbd {
 }
 .app-shell {
   display: flex;
-  height: 100dvh;
+  flex: 1;
+  min-height: 0;
   min-width: 820px;
   overflow: hidden;
 }
@@ -216,15 +217,6 @@ kbd {
   width: 34px;
   height: 34px;
   flex-shrink: 0;
-}
-.badge {
-  font-size: 9px;
-  letter-spacing: 1.2px;
-  border: 1px solid #33443f;
-  color: #91bba6;
-  border-radius: 4px;
-  padding: 3px 5px;
-  margin-left: auto;
 }
 .connection-card {
   margin: 0 13px;
@@ -418,15 +410,6 @@ summary:focus-within .folder-actions {
 }
 .folder-actions {
   display: flex;
-}
-.sidebar-footer {
-  border-top: 1px solid var(--line);
-  padding: 16px 19px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 10px;
-  color: #76879d;
 }
 main {
   display: flex;
@@ -829,29 +812,6 @@ main {
   padding: 30px;
   text-align: center;
   min-height: 250px;
-  background: radial-gradient(ellipse at 50% 42%, #1d2b2b66, transparent 65%);
-}
-.welcome-icon {
-  background: linear-gradient(140deg, #2e483c, #1d2a26);
-  color: #a7dfbd;
-  padding: 19px;
-  border-radius: 17px;
-  border: 1px solid #3c5647;
-  margin-bottom: 25px;
-  box-shadow: 0 10px 35px #0003;
-}
-.eyebrow {
-  font-size: 9px;
-  color: #82ac95;
-  letter-spacing: 2px;
-  margin-bottom: 13px;
-  font-weight: 600;
-}
-.welcome h1 {
-  font-size: 31px;
-  letter-spacing: -0.8px;
-  color: #e1e7ee;
-  font-weight: 550;
 }
 .welcome p {
   color: #879ab2;
@@ -863,18 +823,6 @@ main {
 .welcome .primary {
   font-size: 12px;
   padding: 10px 16px;
-}
-.welcome-features {
-  display: flex;
-  gap: 25px;
-  margin-top: 45px;
-  color: #72859d;
-  font-size: 10px;
-}
-.welcome-features span {
-  display: flex;
-  gap: 7px;
-  align-items: center;
 }
 .query-toolbar {
   padding: 12px 22px;
@@ -1072,9 +1020,6 @@ dialog .hint svg {
   .column-header {
     width: 145px;
   }
-  .welcome h1 {
-    font-size: 27px;
-  }
   .table-toolbar {
     padding: 15px 18px;
   }
@@ -1171,4 +1116,77 @@ dialog fieldset label.check-label {
   margin-top: 7px;
   background: transparent;
   font-size: 11px;
+}
+
+.application {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  min-width: 820px;
+}
+.app-shell[hidden] {
+  display: none;
+}
+.app-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  background: #141b25;
+  border-bottom: 1px solid var(--line);
+}
+.connection-tabs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 5px 10px;
+}
+.connection-tabs [role="tablist"] {
+  display: flex;
+  overflow-x: auto;
+  min-width: 0;
+  gap: 4px;
+}
+.connection-tab {
+  display: flex;
+  align-items: center;
+  border: 1px solid transparent;
+  border-radius: 5px;
+}
+.connection-tab.active {
+  background: #253444;
+  border-color: #4a625a;
+}
+.connection-tab [role="tab"] {
+  background: transparent;
+  border: 0;
+  max-width: 260px;
+}
+.connection-tab [role="tab"] > span:first-of-type {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.add-connection {
+  background: transparent;
+}
+.update-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 12px;
+}
+.update-controls button {
+  padding: 5px 8px;
+  font-size: 11px;
+}
+.update-notice {
+  grid-column: 1 / -1;
+}
+.import-folder {
+  width: calc(100% - 8px);
+  margin: 0 4px 12px;
+  justify-content: flex-start;
+  font-size: 12px;
+}
+.nested-folders {
+  padding-left: 12px;
 }

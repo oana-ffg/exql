@@ -51,6 +51,7 @@ export interface ConnectionProfile {
 }
 export interface Session {
   id: string;
+  server: string;
   catalog: TableId[];
   database: string;
   serverVersion: string;
@@ -75,6 +76,7 @@ export interface SavedQuery {
 export interface Folder {
   id: string;
   name: string;
+  parentId?: string;
 }
 export interface Library {
   folders: Folder[];

@@ -1,8 +1,7 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   ChevronDown,
   Code2,
-  Database,
   FileCode2,
   Folder,
   FolderPlus,
@@ -11,6 +10,7 @@ import {
   Trash2,
   Pencil,
   RefreshCw,
+  FolderInput,
 } from "lucide-react";
 import type { Library, SavedQuery, Session, TableId } from "./types";
 import { ContextMenu, useContextMenu, type MenuAction } from "./ContextMenu";
@@ -34,6 +34,7 @@ export function Sidebar({
   onConnect,
   onNewQuery,
   onFolder,
+  onImport,
   onRenameFolder,
   onDeleteFolder,
   onDeleteQuery,
@@ -50,12 +51,14 @@ export function Sidebar({
   onConnect: () => void;
   onNewQuery: () => void;
   onFolder: () => void;
+  onImport: (files: File[]) => void;
   onRenameFolder: (id: string) => void;
   onDeleteFolder: (id: string) => void;
   onDeleteQuery: (id: string) => void;
   disabled: boolean;
 }) {
   const [search, setSearch] = useState("");
+  const importInput = useRef<HTMLInputElement>(null);
   const context = useContextMenu<ExplorerMenu>();
   function menuActions(target: ExplorerMenu): MenuAction[] {
     if (target.kind === "table") {
@@ -105,7 +108,8 @@ export function Sidebar({
         disabled:
           disabled ||
           !target.id ||
-          library.queries.some((query) => query.folderId === target.id),
+          library.queries.some((query) => query.folderId === target.id) ||
+          library.folders.some((folder) => folder.parentId === target.id),
         run: () => onDeleteFolder(target.id),
       },
     ];
@@ -128,7 +132,6 @@ export function Sidebar({
           height={34}
         />
         <strong>exql</strong>
-        <span className="badge">LOCAL</span>
       </div>
       <button
         className="connection-card"
@@ -138,9 +141,7 @@ export function Sidebar({
         <span className={`connection-dot ${session ? "connected" : ""}`} />
         <div>
           <strong>{session?.database ?? "No connection"}</strong>
-          <span>
-            {session ? "Microsoft SQL Server" : "Connect to SQL Server"}
-          </span>
+          <span>{session ? session.server : "Connect to SQL Server"}</span>
         </div>
         <ChevronDown size={14} />
       </button>
@@ -215,80 +216,29 @@ export function Sidebar({
             <FolderPlus size={15} />
           </button>
         </div>
-        {library.queries.length === 0 && library.folders.length === 0 && (
-          <p className="sidebar-hint">
-            Save useful SQL and organize it into folders.
-          </p>
-        )}
-        {[{ id: "", name: "Unfiled" }, ...library.folders]
-          .filter(
-            (folder) =>
-              folder.id || library.queries.some((query) => !query.folderId),
-          )
-          .map((folder) => (
-            <details key={folder.id} open className="tree-folder">
-              <summary
-                {...context.bind({
-                  kind: "folder",
-                  id: folder.id,
-                  name: folder.name,
-                })}
-              >
-                <Folder size={15} />
-                <span>{folder.name}</span>
-                {folder.id && (
-                  <div className="folder-actions">
-                    <button
-                      className="icon-button"
-                      aria-label={`Rename ${folder.name}`}
-                      onClick={(event) => {
-                        event.preventDefault();
-                        onRenameFolder(folder.id);
-                      }}
-                    >
-                      <Pencil size={12} />
-                    </button>
-                    <button
-                      className="icon-button"
-                      aria-label={`Delete folder ${folder.name}`}
-                      onClick={(event) => {
-                        event.preventDefault();
-                        onDeleteFolder(folder.id);
-                      }}
-                    >
-                      <Trash2 size={12} />
-                    </button>
-                  </div>
-                )}
-              </summary>
-              {library.queries
-                .filter((query) => query.folderId === folder.id)
-                .map((query) => (
-                  <div className="saved-query" key={query.id}>
-                    <button
-                      className="tree-item"
-                      disabled={disabled}
-                      onClick={() => onQuery(query)}
-                      {...context.bind({ kind: "query", query })}
-                    >
-                      <FileCode2 size={14} />
-                      <span>{query.name}</span>
-                    </button>
-                    <button
-                      className="icon-button"
-                      aria-label={`Delete query ${query.name}`}
-                      onClick={() => onDeleteQuery(query.id)}
-                    >
-                      <Trash2 size={12} />
-                    </button>
-                  </div>
-                ))}
-            </details>
-          ))}
-      </div>
-      <div className="sidebar-footer">
-        <Database size={14} />
-        <span>One database. A clearer view.</span>
+        <button
+          className="import-folder"
+          disabled={disabled}
+          onClick={() => importInput.current?.click()}
+        >
+          <FolderInput size={15} /> Import SQL folder
+        </button>
+        <input
+          ref={(input) => {
+            importInput.current = input;
+            if (input) input.webkitdirectory = true;
+          }}
+          type="file"
+          aria-label="Import SQL folder"
+          hidden
+          multiple
+          onChange={(event) => {
+            const files = Array.from(event.currentTarget.files ?? []);
+            event.currentTarget.value = "";
+            if (files.length) onImport(files);
+          }}
+        />
+        {renderFolders("")}
       </div>
       {context.menu && (
         <ContextMenu
@@ -306,4 +256,81 @@ export function Sidebar({
       )}
     </aside>
   );
+
+  function renderFolders(parentId: string) {
+    return [
+      { id: "", name: "Unfiled" },
+      ...library.folders.filter(
+        (folder) => (folder.parentId ?? "") === parentId,
+      ),
+    ]
+      .filter(
+        (folder) =>
+          folder.id ||
+          (!parentId && library.queries.some((query) => !query.folderId)),
+      )
+      .map((folder) => (
+        <details key={folder.id} open className="tree-folder">
+          <summary
+            {...context.bind({
+              kind: "folder",
+              id: folder.id,
+              name: folder.name,
+            })}
+          >
+            <Folder size={15} />
+            <span>{folder.name}</span>
+            {folder.id && (
+              <div className="folder-actions">
+                <button
+                  className="icon-button"
+                  aria-label={`Rename ${folder.name}`}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    onRenameFolder(folder.id);
+                  }}
+                >
+                  <Pencil size={12} />
+                </button>
+                <button
+                  className="icon-button"
+                  aria-label={`Delete folder ${folder.name}`}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    onDeleteFolder(folder.id);
+                  }}
+                >
+                  <Trash2 size={12} />
+                </button>
+              </div>
+            )}
+          </summary>
+          {folder.id && (
+            <div className="nested-folders">{renderFolders(folder.id)}</div>
+          )}
+          {library.queries
+            .filter((query) => query.folderId === folder.id)
+            .map((query) => (
+              <div className="saved-query" key={query.id}>
+                <button
+                  className="tree-item"
+                  disabled={disabled}
+                  onClick={() => onQuery(query)}
+                  {...context.bind({ kind: "query", query })}
+                >
+                  <FileCode2 size={14} />
+                  <span>{query.name}</span>
+                </button>
+                <button
+                  className="icon-button"
+                  aria-label={`Delete query ${query.name}`}
+                  onClick={() => onDeleteQuery(query.id)}
+                >
+                  <Trash2 size={12} />
+                </button>
+              </div>
+            ))}
+        </details>
+      ));
+  }
 }

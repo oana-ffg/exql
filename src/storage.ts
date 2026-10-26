@@ -16,6 +16,7 @@ const failedSaves = new Set<string>();
 // Disk-backed workspace state is independent of the desktop host's randomly assigned port.
 export function useStored<T>(key: "scratch" | "library", fallback: T) {
   const [value, setValue] = useState<T>(fallback);
+  const latest = useRef(value);
   const [ready, setReady] = useState(false);
   const queue = useRef<Promise<unknown>>(Promise.resolve());
   useEffect(() => {
@@ -24,7 +25,8 @@ export function useStored<T>(key: "scratch" | "library", fallback: T) {
     request<{ value: T | null }>(`/workspace/${key}`, undefined, abort.signal)
       .then((stored) => {
         if (abort.signal.aborted) return;
-        setValue(stored.value ?? fallback);
+        latest.current = stored.value ?? fallback;
+        setValue(latest.current);
         setReady(true);
       })
       .catch((error) => {
@@ -32,13 +34,18 @@ export function useStored<T>(key: "scratch" | "library", fallback: T) {
       });
     return () => abort.abort();
   }, [key]);
-  function update(next: T) {
+  function update(change: T | ((current: T) => T)) {
     if (!ready) {
       report(
         new Error("Saved workspace has not loaded. Retry before editing."),
       );
       return;
     }
+    const next =
+      typeof change === "function"
+        ? (change as (current: T) => T)(latest.current)
+        : change;
+    latest.current = next;
     setValue(next);
     window.exqlPendingWrites = (window.exqlPendingWrites ?? 0) + 1;
     queue.current = queue.current

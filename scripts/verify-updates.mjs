@@ -100,9 +100,14 @@ try {
   ({ page } = await attach("0.0.1"));
   page.on("pageerror", (error) => errors.push(error.message));
   await expect(page.locator(".update-version")).toHaveText("ExQL 0.0.1");
+  await page
+    .getByRole("button", { name: "Check for updates", exact: true })
+    .click();
   await expect(page.locator(".update-message")).toHaveText(
     "You’re up to date.",
   );
+  await page.getByRole("button", { name: "Dismiss update notice" }).click();
+  await expect(page.locator(".update-notice")).toHaveCount(0);
 
   // A corrupt full package must never become a restartable update.
   await writeFile(join(feed, target.FileName), "corrupt package");
@@ -255,9 +260,14 @@ try {
   await expect(page.locator(".update-version")).toHaveText("ExQL 0.0.2", {
     timeout: 30_000,
   });
+  await page
+    .getByRole("button", { name: "Check for updates", exact: true })
+    .click();
   await expect(page.locator(".update-message")).toHaveText(
     "You’re up to date.",
   );
+  await page.getByRole("button", { name: "Dismiss update notice" }).click();
+  await expect(page.locator(".update-notice")).toHaveCount(0);
   for (const [file, before] of persisted)
     assert.equal(
       await readFile(join(data, file), "utf8"),

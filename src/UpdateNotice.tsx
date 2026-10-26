@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Download, RefreshCw } from "lucide-react";
+import { Download, RefreshCw, X } from "lucide-react";
 
 interface UpdateState {
   status:
@@ -40,16 +40,26 @@ declare global {
 
 export function UpdateNotice() {
   const [state, setState] = useState<UpdateState | null>(null);
+  const [dismissed, setDismissed] = useState(false);
+  const [manual, setManual] = useState(false);
   const bridge = window.chrome?.webview;
   useEffect(() => {
     if (!bridge) return;
     const receive = (event: DesktopMessage) => {
-      if (event.data.type === "updates") setState(event.data.state);
+      if (event.data.type === "updates") {
+        setState(event.data.state);
+        setDismissed(false);
+      }
     };
     bridge.addEventListener("message", receive);
     bridge.postMessage("updates.status");
     return () => bridge.removeEventListener("message", receive);
   }, [bridge]);
+  useEffect(() => {
+    if (state?.status !== "current" || !manual) return;
+    const timeout = setTimeout(() => setManual(false), 5000);
+    return () => clearTimeout(timeout);
+  }, [state?.status, manual]);
 
   if (!state || state.status === "unavailable") return null;
   const working = state.status === "checking" || state.status === "downloading";
@@ -66,28 +76,54 @@ export function UpdateNotice() {
             ? "You’re up to date."
             : "Updates download automatically.");
 
+  const showMessage =
+    !dismissed &&
+    (working ||
+      ready ||
+      state.status === "error" ||
+      !!state.message ||
+      (state.status === "current" && manual));
   return (
-    <div
-      className={`update-notice ${state.status === "error" || state.message ? "update-warning" : ""}`}
-    >
-      <span className="update-version">ExQL {state.currentVersion}</span>
-      <span className="update-message" role="status">
-        {text}
-      </span>
-      <button
-        type="button"
-        disabled={working}
-        onClick={() =>
-          bridge?.postMessage(ready ? "updates.restart" : "updates.check")
-        }
-      >
-        {ready ? <RefreshCw size={13} /> : <Download size={13} />}
-        {ready
-          ? "Restart to update"
-          : state.status === "error"
-            ? "Retry update"
-            : "Check for updates"}
-      </button>
-    </div>
+    <>
+      <div className="update-controls">
+        <span className="update-version">ExQL {state.currentVersion}</span>
+        <button
+          type="button"
+          disabled={working}
+          onClick={() => {
+            setManual(true);
+            setDismissed(false);
+            bridge?.postMessage(ready ? "updates.restart" : "updates.check");
+          }}
+        >
+          {ready ? <RefreshCw size={13} /> : <Download size={13} />}
+          {ready
+            ? "Restart to update"
+            : state.status === "error"
+              ? "Retry update"
+              : "Check for updates"}
+        </button>
+      </div>
+      {showMessage && (
+        <div
+          className={`update-notice ${state.status === "error" || state.message ? "update-warning" : ""}`}
+        >
+          <span className="update-message" role="status">
+            {text}
+          </span>
+          <button
+            type="button"
+            className="icon-button"
+            aria-label="Dismiss update notice"
+            onClick={() => {
+              setDismissed(true);
+              setManual(false);
+            }}
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
+    </>
   );
 }

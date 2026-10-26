@@ -62,7 +62,7 @@ public static class ExqlHost
             await using var connection = new SqlConnection(connectionString);
             await connection.OpenAsync(ct);
             var catalog = await Database.Catalog(connection, ct);
-            return Results.Ok(new { id = sessions.Add(connectionString), catalog, database = connection.Database, serverVersion = connection.ServerVersion });
+            return Results.Ok(new { id = sessions.Add(connectionString), catalog, database = connection.Database, server = connection.DataSource, serverVersion = connection.ServerVersion });
         }
 
         var api = app.MapGroup("/api/sessions/{id}");
