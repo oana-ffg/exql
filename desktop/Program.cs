@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Windows;
+using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.Wpf;
@@ -38,7 +39,7 @@ internal static class Program
         var origin = host.Urls.Single();
         var app = new Application();
         var web = new WebView2();
-        var window = new Window { Title = "ExQL", Width = 1380, Height = 900, MinWidth = 850, MinHeight = 600, WindowStartupLocation = WindowStartupLocation.CenterScreen, Background = System.Windows.Media.Brushes.Black, Content = web };
+        var window = new Window { Title = "ExQL", Icon = BitmapFrame.Create(new Uri("pack://application:,,,/exql.ico")), Width = 1380, Height = 900, MinWidth = 850, MinHeight = 600, WindowStartupLocation = WindowStartupLocation.CenterScreen, Background = System.Windows.Media.Brushes.Black, Content = web };
         var closing = false;
         var checkingClose = false;
         var restartForUpdate = false;

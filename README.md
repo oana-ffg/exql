@@ -77,6 +77,8 @@ dotnet run --project devhost -- --DataDirectory "$PWD/artifacts/test-state"
 
 `server/` contains SQL access, result storage, exports, and Windows credentials. `desktop/` provides the native window and packaging. `devhost/` runs the backend without a window for development and integration tests. `src/` contains the React UI and pure data formatting functions. No production database credentials or telemetry are included.
 
+The app icon's source is `public/exql.png`, created with built-in imagegen and shared by the sidebar and browser tab. After replacing it, run `npm run icon` (requires Edge) to regenerate the multi-size `public/exql.ico` used by the Windows executable, native window, and portable launcher. Both assets are checked in; normal builds do not need to regenerate them.
+
 ## Verify
 
 The SQL seed creates only the separate `ExqlDemo` database and its demonstration tables, and does not reset existing databases. Integration tests use this database, temporarily edit its fixture rows, and restore their original values.

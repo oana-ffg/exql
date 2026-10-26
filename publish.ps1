@@ -28,7 +28,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Desktop publish failed.' }
 Copy-Item -LiteralPath LICENSE, THIRD-PARTY-NOTICES.txt -Destination $publishPath
 $packArgs = @('pack', '--packId', 'ExQL.Desktop', '--packTitle', 'ExQL', '--packVersion', $Version,
     '--packDir', $publishPath, '--mainExe', 'ExQL.exe', '--runtime', 'win-x64',
-    '--channel', 'win-x64', '--noInst', '--outputDir', $outputPath)
+    '--channel', 'win-x64', '--icon', (Join-Path $PSScriptRoot 'public/exql.ico'), '--noInst', '--outputDir', $outputPath)
 if ($ReleaseNotes) { $packArgs += @('--releaseNotes', [IO.Path]::GetFullPath($ReleaseNotes)) }
 & (Join-Path $toolPath 'vpk.exe') @packArgs
 if ($LASTEXITCODE -ne 0) { throw 'Update packaging failed.' }

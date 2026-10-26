@@ -120,9 +120,13 @@ export function Sidebar({
   return (
     <aside className="sidebar">
       <div className="brand">
-        <div className="brand-mark">
-          e<span>›</span>
-        </div>
+        <img
+          className="brand-mark"
+          src="/exql.png"
+          alt=""
+          width={34}
+          height={34}
+        />
         <strong>exql</strong>
         <span className="badge">LOCAL</span>
       </div>

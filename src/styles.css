@@ -212,14 +212,10 @@ kbd {
   font-weight: 650;
 }
 .brand-mark {
-  font-size: 25px;
-  font-weight: 700;
-  color: var(--accent);
-  letter-spacing: -4px;
-  width: 25px;
-}
-.brand-mark span {
-  font-weight: 400;
+  display: block;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
 }
 .badge {
   font-size: 9px;

@@ -1,12 +1,13 @@
 {
   "name": "exql",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "server": "dotnet run --project devhost",
     "build": "tsc -b && vite build",
+    "icon": "node scripts/generate-icon.mjs",
     "test": "vitest run",
     "test:e2e": "playwright test",
     "check": "npm run build && npm test && dotnet restore server.tests --configfile NuGet.Config && dotnet test server.tests --no-restore && dotnet restore desktop --configfile NuGet.Config && dotnet build desktop --no-restore",
