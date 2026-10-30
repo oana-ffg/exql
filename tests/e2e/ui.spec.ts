@@ -1,4 +1,7 @@
-import { test, expect, type Page } from "@playwright/test";
+import { databaseName } from "../support/database";
+import { fillConnection } from "../support/ui";
+import { test, expect } from "../support/fixtures";
+import type { Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 
 async function connect(page: Page) {
@@ -9,8 +12,8 @@ async function connect(page: Page) {
   await page.getByLabel("Save this connection").uncheck();
   await page
     .getByRole("textbox", { name: "Database", exact: true })
-    .fill("ExqlDemo");
-  await page.getByLabel("Trust server certificate (local development)").check();
+    .fill(databaseName);
+  await fillConnection(page);
   await page.getByRole("button", { name: "Connect", exact: true }).click();
   await expect(page.getByText("Connected", { exact: true })).toBeVisible();
   await page
@@ -309,18 +312,6 @@ test("spreadsheet selection, cell editing, filtering and downloads against SQL S
   ).toBeEnabled();
   await expect(page.locator('[data-cell="0:6"]')).toHaveText(
     "UI verification edit",
-  );
-  await page.locator('[data-cell="0:6"]').dblclick();
-  await page
-    .getByLabel("Cell value")
-    .fill("Test keyboard navigation and selection.");
-  await page.getByRole("button", { name: "Apply to grid" }).click();
-  await page.getByRole("button", { name: "Save changes", exact: true }).click();
-  await expect(
-    page.getByRole("button", { name: "Refresh", exact: true }),
-  ).toBeEnabled();
-  await expect(page.locator('[data-cell="0:6"]')).toHaveText(
-    "Test keyboard navigation and selection.",
   );
   await page.getByRole("button", { name: "Add filter" }).click();
   await page.getByLabel("Filter 1 column").selectOption("Status");

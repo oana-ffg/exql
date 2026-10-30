@@ -1,0 +1,16 @@
+export const editedTypeValues = {
+  Id: "2",
+  LargeInteger: "-9223372036854775808",
+  ExactDecimal: "98765432109876543210.987654321098765432",
+  EventTime: "2027-01-02T03:04:05.7654321-04:30",
+  Payload: "0xABCDEF0001",
+  NullableText: "日本語 æøå ' \"\nline",
+  EmptyText: "Unicode ✓",
+  LegacyDateTime: "2027-01-02T03:04:05.123",
+  LegacyMinuteTime: "2027-01-02T03:04:00.000",
+  CalendarDate: "2027-01-02",
+  ClockTime: "23:59:58.7654321",
+  Identifier: "fedcba98-7654-3210-fedc-ba9876543210",
+  Amount: "-98765.4321",
+  PreciseDateTime: "2027-01-02T03:04:05.7654321",
+};

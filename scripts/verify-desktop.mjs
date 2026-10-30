@@ -1,86 +1,173 @@
 import assert from "node:assert/strict";
-import { chromium } from "@playwright/test";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { join, resolve } from "node:path";
+import { expect } from "@playwright/test";
+import { DisposableDatabase, rows } from "../tests/support/database.ts";
+import {
+  fillConnection,
+  openTable,
+  editCell,
+  runSql,
+} from "../tests/support/ui.ts";
+import {
+  launchDesktop,
+  closeDesktop,
+  deleteDesktopProfiles,
+} from "./desktop-harness.mjs";
 
-// Launch dist/ExQL.exe --automation-port 9223 before running this optional Windows smoke test.
-const browser = await chromium.connectOverCDP("http://127.0.0.1:9223");
-const page = browser
-  .contexts()[0]
-  .pages()
-  .filter((page) => page.url().startsWith("http://127.0.0.1:"))
-  .at(-1);
-assert(page, "ExQL desktop page is available");
+const root = resolve(process.argv[2]);
+const database = await new DisposableDatabase().create();
 const errors = [];
-page.on("pageerror", (error) => errors.push(error.message));
-const origin = new URL(page.url()).origin;
-const blocked = await fetch(origin + "/api/profiles", {
-  headers: { "X-Exql-Client": "1" },
-});
-assert.equal(
-  blocked.status,
-  403,
-  "Native API token is required outside the desktop WebView",
-);
-
-await page.getByRole("button", { name: /No connection/ }).click();
-const saved = page.getByRole("button", {
-  name: "Connect to Local development",
-  exact: true,
-});
-if (await saved.count()) await saved.click();
-else {
+let attached;
+let tracing = false;
+try {
+  attached = await launchDesktop(root, 9223);
+  let { page, context } = attached;
+  page.on("pageerror", (error) => errors.push(error.stack));
+  await context.tracing.start({
+    screenshots: true,
+    snapshots: true,
+    sources: true,
+  });
+  tracing = true;
+  const blocked = await fetch(new URL("/api/profiles", page.url()), {
+    headers: { "X-Exql-Client": "1" },
+  });
+  assert.equal(
+    blocked.status,
+    403,
+    "Desktop API requires its native launch token",
+  );
+  await page
+    .getByRole("button", { name: "Add connection", exact: true })
+    .click();
   await page
     .getByLabel("Connection name", { exact: true })
-    .fill("Local development");
-  await page.getByLabel("Folder (optional)", { exact: true }).fill("Local");
-  await page
-    .getByRole("textbox", { name: "Database", exact: true })
-    .fill("ExqlDemo");
-  await page.getByLabel("Trust server certificate (local development)").check();
+    .fill("Portable journey");
+  await fillConnection(page, database.name);
   await page
     .getByRole("button", { name: "Save & connect", exact: true })
     .click();
-}
-await page.getByText("Connected", { exact: true }).waitFor();
-await page.getByRole("button", { name: "WorkItems", exact: true }).click();
-await page.locator('[data-cell="0:1"]').waitFor();
-assert.equal(await page.locator("tbody tr").count(), 200);
-await page.locator('[data-cell="0:1"]').click();
-await page.keyboard.press("Control+c");
-assert.equal(
-  await page.evaluate(() => navigator.clipboard.readText()),
-  "Build the data grid",
-);
-await page.getByRole("button", { name: "Next page", exact: true }).click();
-await page.waitForFunction(
-  () => document.querySelectorAll("tbody tr").length === 45,
-);
-await page.getByRole("button", { name: "Previous page", exact: true }).click();
-await page.waitForFunction(
-  () => document.querySelectorAll("tbody tr").length === 200,
-);
-await page.screenshot({ path: "artifacts/desktop-grid.png" });
-
-await page.getByRole("button", { name: "New query SQL", exact: true }).click();
-await page
-  .locator(".cm-content")
-  .fill(
-    "SELECT TOP (20) Id, Title, Status, Priority, Estimate\nFROM dbo.WorkItems\nORDER BY Id;",
+  await expect(page.getByText("Connected", { exact: true })).toBeVisible();
+  await openTable(page);
+  await editCell(page, 0, "Title", "Portable committed edit æøå 日本語");
+  await page.getByRole("button", { name: "Save changes", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Save changes", exact: true }),
+  ).toHaveCount(0);
+  assert.deepEqual(
+    await rows(database.name, "SELECT Title FROM dbo.WorkItems WHERE Id=1"),
+    [{ Title: "Portable committed edit æøå 日本語" }],
   );
-await page.getByRole("button", { name: /Run SQL/ }).click();
-await page.waitForFunction(
-  () => document.querySelectorAll("tbody tr").length === 20,
-);
-await page.getByRole("button", { name: "Save query", exact: true }).click();
-await page.getByLabel("Query name", { exact: true }).fill("Browse work items");
-await page
-  .getByRole("dialog")
-  .getByRole("button", { name: "Save query", exact: true })
-  .click();
-await page.waitForFunction(() => !window.exqlPendingWrites);
-await page.screenshot({ path: "artifacts/desktop-query.png" });
-assert.deepEqual(errors, []);
-console.log(
-  "Desktop smoke test passed: native API isolation, saved Windows connection, SQL Server grid, pagination, clipboard, query execution, and saved SQL.",
-);
-// Disconnect the test client without sending Browser.close to the native WebView2 process.
+  const sql =
+    "INSERT dbo.CommandLog VALUES(1,N'Portable SQL'); SELECT Id,Title,Status,Priority FROM dbo.WorkItems ORDER BY Id;";
+  const response = await runSql(page, sql);
+  assert.equal(response.status(), 200, await response.text());
+  assert.deepEqual(await rows(database.name, "SELECT * FROM dbo.CommandLog"), [
+    { Id: 1, Message: "Portable SQL" },
+  ]);
+  await page
+    .locator(".cm-content")
+    .fill("SELECT Id,Title,Status,Priority FROM dbo.WorkItems ORDER BY Id;");
+  await page.getByRole("button", { name: "Save query", exact: true }).click();
+  await page.getByLabel("Query name").fill("Portable saved query");
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Save query", exact: true })
+    .click();
+  await page.waitForFunction(
+    () => !window.exqlPendingWrites && !window.exqlDirty,
+  );
+  await context.tracing.stop({ path: join(root, "before-restart-trace.zip") });
+  tracing = false;
+  closeDesktop(root);
+  await expect.poll(() => page.isClosed()).toBe(true);
+
+  attached = await launchDesktop(root, 9223);
+  ({ page, context } = attached);
+  page.on("pageerror", (error) => errors.push(error.stack));
+  await context.tracing.start({
+    screenshots: true,
+    snapshots: true,
+    sources: true,
+  });
+  tracing = true;
+  await page
+    .getByRole("button", { name: "Add connection", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Connect to Portable journey", exact: true })
+    .click();
+  await expect(page.getByText("Connected", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "SQL scripts", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Portable saved query", exact: true })
+    .click();
+  await expect(page.locator(".cm-content")).toHaveText(
+    "SELECT Id,Title,Status,Priority FROM dbo.WorkItems ORDER BY Id;",
+  );
+  await page.getByRole("button", { name: /Run SQL/ }).click();
+  await expect(page.locator("tbody tr")).toHaveCount(200);
+  await page.getByRole("button", { name: "Next page", exact: true }).click();
+  await expect(page.locator("tbody tr")).toHaveCount(45);
+  const downloads = join(root, "downloads");
+  await mkdir(downloads);
+  const cdp = await context.newCDPSession(page);
+  await cdp.send("Browser.setDownloadBehavior", {
+    behavior: "allow",
+    downloadPath: downloads,
+    eventsEnabled: true,
+  });
+  const completed = new Promise((resolve, reject) => {
+    const timeout = setTimeout(
+      () => reject(new Error("Native download timed out")),
+      30_000,
+    );
+    cdp.on("Browser.downloadProgress", (event) => {
+      if (event.state === "completed") {
+        clearTimeout(timeout);
+        resolve();
+      }
+      if (event.state === "canceled") {
+        clearTimeout(timeout);
+        reject(new Error("Native download cancelled"));
+      }
+    });
+  });
+  await page
+    .getByRole("button", { name: "Export result", exact: true })
+    .click();
+  await page.getByLabel("Format", { exact: true }).selectOption("json");
+  await page.getByRole("button", { name: "Download", exact: true }).click();
+  await completed;
+  assert.deepEqual(
+    JSON.parse(await readFile(join(downloads, "query-result.json"), "utf8")),
+    await rows(
+      database.name,
+      "SELECT Id,Title,Status,Priority FROM dbo.WorkItems ORDER BY Id",
+    ),
+  );
+  await page.screenshot({ path: join(root, "desktop-complete.png") });
+  assert.deepEqual(errors, []);
+  console.log(
+    "PASS: portable native API isolation, connect, committed grid edit, SQL mutation, saved query, restart, profile reconnect, pagination and native download; independent DB assertions.",
+  );
+} catch (error) {
+  await writeFile(join(root, "failure.txt"), error.stack ?? String(error));
+  if (attached?.page && !attached.page.isClosed())
+    await attached.page.screenshot({ path: join(root, "failure.png") });
+  throw error;
+} finally {
+  try {
+    if (tracing)
+      await attached.context.tracing.stop({
+        path: join(root, "desktop-trace.zip"),
+      });
+    if (attached?.page && !attached.page.isClosed())
+      await deleteDesktopProfiles(attached.page);
+  } finally {
+    closeDesktop(root);
+    await database.dispose();
+  }
+}
 process.exit(0);

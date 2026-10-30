@@ -1,4 +1,10 @@
-import { test, expect } from "@playwright/test";
+import {
+  connection,
+  connectionString,
+  databaseName,
+  settings,
+} from "../support/database";
+import { test, expect } from "../support/fixtures";
 
 test("saved profiles clone from the row menu with a new name and color", async ({
   page,
@@ -21,15 +27,7 @@ test("saved profiles clone from the row menu with a new name and color", async (
       data: {
         name,
         folder: "Clone tests",
-        connection: {
-          server: "localhost",
-          database: "ExqlDemo",
-          authentication: "windows",
-          username: "",
-          password: "",
-          encrypt: true,
-          trustServerCertificate: true,
-        },
+        connection,
       },
     });
     expect(created.ok(), await created.text()).toBeTruthy();
@@ -41,7 +39,7 @@ test("saved profiles clone from the row menu with a new name and color", async (
       .click();
     const row = page.locator(".profile-row").filter({
       has: page.getByRole("button", {
-        name: `${name} localhost / ExqlDemo`,
+        name: `${name} ${settings.server} / ${databaseName}`,
         exact: true,
       }),
     });
@@ -79,7 +77,7 @@ test("saved profiles clone from the row menu with a new name and color", async (
     ).toHaveCount(0);
     await expect(
       page.getByRole("button", {
-        name: `${name} (copy) localhost / ExqlDemo`,
+        name: `${name} (copy) ${settings.server} / ${databaseName}`,
         exact: true,
       }),
     ).toBeVisible();
@@ -137,12 +135,11 @@ for (const authentication of ["sql", "connectionString"]) {
           folder: "",
           connection: {
             server: "localhost",
-            database: "ExqlDemo",
+            database: databaseName,
             authentication,
             username: "clone-test",
             password: "test-only",
-            connectionString:
-              "Server=localhost;Database=ExqlDemo;Integrated Security=True;TrustServerCertificate=True;",
+            connectionString: connectionString(),
             encrypt: true,
             trustServerCertificate: true,
           },
@@ -157,7 +154,7 @@ for (const authentication of ["sql", "connectionString"]) {
         .click();
       const row = page.locator(".profile-row").filter({
         has: page.getByRole("button", {
-          name: `${name} localhost / ExqlDemo`,
+          name: `${name} ${settings.server} / ${databaseName}`,
           exact: true,
         }),
       });
@@ -176,9 +173,7 @@ for (const authentication of ["sql", "connectionString"]) {
       );
       await expect(input).toHaveValue("");
       await input.fill(
-        authentication === "sql"
-          ? "replacement-test-only"
-          : "Server=localhost;Database=ExqlDemo;Integrated Security=True;TrustServerCertificate=True;",
+        authentication === "sql" ? "replacement-test-only" : connectionString(),
       );
       const saved = page.waitForResponse(
         (response) =>

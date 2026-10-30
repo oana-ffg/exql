@@ -1,0 +1,136 @@
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [main]
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+env:
+  DOTNET_NOLOGO: "1"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+jobs:
+  checks:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+      - run: npm ci
+      - run: npm run format:check
+      - run: npm run check
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: checks-diagnostics
+          path: "**/TestResults/**"
+  sql-versions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        sql: [2019, 2022, 2025]
+    services:
+      sql:
+        image: mcr.microsoft.com/mssql/server:${{ matrix.sql }}-latest
+        env:
+          ACCEPT_EULA: Y
+          MSSQL_PID: Developer
+          MSSQL_SA_PASSWORD: Exql!${{ github.run_id }}aB9${{ github.run_attempt }}
+        ports:
+          - 1433:1433
+    env:
+      EXQL_TEST_SERVER: localhost,1433
+      EXQL_TEST_AUTH: sql
+      EXQL_TEST_USER: sa
+      EXQL_TEST_PASSWORD: Exql!${{ github.run_id }}aB9${{ github.run_attempt }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+      - run: echo "::add-mask::$EXQL_TEST_PASSWORD"
+      - run: npm ci
+      - run: npm run build
+      - name: Wait for SQL readiness and run API database journeys
+        run: node scripts/ci/wait-for-sql.mjs && npx playwright test api.spec.ts
+      - name: SQL container diagnostics
+        if: failure()
+        run: docker logs ${{ job.services.sql.id }} > artifacts/sql-server.log 2>&1
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: sql-${{ matrix.sql }}-diagnostics
+          path: |
+            test-results/
+            playwright-report/
+            artifacts/
+  e2e:
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+      - run: npm ci
+      - run: ./scripts/ci/install-sql.ps1
+      - run: npm run test:e2e
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: edge-diagnostics
+          path: |
+            test-results/
+            playwright-report/
+            artifacts/
+            C:/Program Files/Microsoft SQL Server/160/Setup Bootstrap/Log/**/Summary*.txt
+  desktop:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+      - run: npm ci
+      - run: ./scripts/ci/install-sql.ps1
+      - name: Package and drive the portable application
+        run: npm run test:desktop
+      - name: Real portable update, integrity failure and restart guards
+        run: ./scripts/test-updates.ps1
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: desktop-diagnostics
+          path: |
+            artifacts/
+            !artifacts/publish/**
+            !artifacts/tools/**
+            !artifacts/**/app/**
+            !artifacts/**/packages/**
+            !artifacts/**/feed/**
+            !artifacts/**/live-feed/**
+            !artifacts/**/WebView2/**
+            C:/Program Files/Microsoft SQL Server/160/Setup Bootstrap/Log/**/Summary*.txt

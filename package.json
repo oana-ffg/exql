@@ -1,6 +1,6 @@
 {
   "name": "exql",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "private": true,
   "type": "module",
   "scripts": {
@@ -9,11 +9,12 @@
     "build": "tsc -b && vite build",
     "icon": "node scripts/generate-icon.mjs",
     "test": "vitest run",
-    "test:e2e": "playwright test",
+    "test:e2e": "npm run build && playwright test",
     "check": "npm run build && npm test && dotnet restore server.tests --configfile NuGet.Config && dotnet test server.tests --no-restore && dotnet restore desktop --configfile NuGet.Config && dotnet build desktop --no-restore",
     "start": "dotnet run --project desktop",
-    "format": "prettier --write src tests shared *.json *.ts *.md",
-    "format:check": "prettier --check src tests shared *.json *.ts *.md"
+    "format": "prettier --write src tests shared scripts/*.mjs scripts/ci/*.mjs .github *.json *.ts *.md",
+    "format:check": "prettier --check src tests shared scripts/*.mjs scripts/ci/*.mjs .github *.json *.ts *.md",
+    "test:desktop": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/test-desktop.ps1"
   },
   "dependencies": {
     "@codemirror/commands": "^6.11.0",
@@ -28,11 +29,13 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",
+    "@types/mssql": "^12.3.0",
     "@types/node": "^26.5.0",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
     "@vitejs/plugin-react": "^6.1.1",
     "agent-browser": "^0.27.0",
+    "mssql": "^12.7.13",
     "prettier": "^3.9.6",
     "typescript": "^7.0.2",
     "vite": "^8.2.4",
