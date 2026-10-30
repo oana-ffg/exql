@@ -76,6 +76,23 @@ describe("lossless copy formats", () => {
       "SELECT 1 AS [n]\nUNION ALL\nSELECT 2 AS [n];",
     );
   });
+  test("staged 1/0 bit aliases copy as booleans and typed bit SQL", () => {
+    const flag = [column("flag", "bit")];
+    const staged = [["1"], ["0"], ["true"], [null]];
+    expect(JSON.parse(jsonRows(flag, staged))).toEqual([
+      { flag: true },
+      { flag: false },
+      { flag: true },
+      { flag: null },
+    ]);
+    expect(sqlRows(flag, staged, "dbo", "t")).toContain(
+      "VALUES (1);\nINSERT INTO [dbo].[t] ([flag]) VALUES (0);",
+    );
+    expect(querySqlRows(flag, [["1"], ["false"]])).toBe(
+      "SELECT CAST(1 AS bit) AS [flag]\nUNION ALL\nSELECT CAST(0 AS bit) AS [flag];",
+    );
+    expect(() => jsonRows(flag, [["yes"]])).toThrow("Bit values");
+  });
 });
 describe("copy all results as text", () => {
   test("labels each result, keeps fences literal, and appends messages and affected rows", () => {

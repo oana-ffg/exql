@@ -5,18 +5,18 @@ import { resolve } from "node:path";
 import type { Page } from "@playwright/test";
 import { test, expect } from "../support/fixtures";
 import {
-  connectionFor,
+  connectionString,
   databaseName,
   DisposableDatabase,
   execute,
   rows,
-  settings,
   tableRows,
 } from "../support/database";
 import {
   connect,
   editCell,
   fillConnection,
+  gridCell,
   openTable,
   runSql,
 } from "../support/ui";
@@ -111,16 +111,8 @@ test("grid edits round-trip every editable type without numeric, binary or date 
   const [actual] = await tableRows(databaseName, "TypeSamples");
   expect(actual).toMatchObject(values);
   expect(actual.Derived).toBe("3");
-  for (const [column, value] of Object.entries(values)) {
-    const index = await page
-      .getByRole("columnheader")
-      .evaluateAll(
-        (headers, name) =>
-          headers.findIndex((header) => header.textContent?.includes(name)) - 1,
-        column,
-      );
-    await expect(page.locator(`[data-cell="0:${index}"]`)).toHaveText(value);
-  }
+  for (const [column, value] of Object.entries(values))
+    await expect(await gridCell(page, 0, column)).toHaveText(value);
 });
 
 test("views, tables without keys and identity/computed/rowversion cells are read-only in the grid", async ({
@@ -142,14 +134,7 @@ test("views, tables without keys and identity/computed/rowversion cells are read
     ["TypeSamples", "Derived"],
   ]) {
     await openTable(page, table);
-    const index = await page
-      .getByRole("columnheader")
-      .evaluateAll(
-        (headers, name) =>
-          headers.findIndex((header) => header.textContent?.includes(name)) - 1,
-        column,
-      );
-    await page.locator(`[data-cell="0:${index}"]`).dblclick();
+    await (await gridCell(page, 0, column)).dblclick();
     await expect(page.getByRole("dialog")).toHaveCount(0);
   }
 });
@@ -537,9 +522,7 @@ for (const mode of ["sql", "connectionString"] as const) {
       .click();
     const name = `Stored ${mode}`;
     await page.getByLabel("Connection name", { exact: true }).fill(name);
-    const sqlConnection = {
-      ...connectionFor(databaseName),
-      authentication: "sql",
+    const login = {
       username: process.env.EXQL_TEST_SQL_USER!,
       password: process.env.EXQL_TEST_SQL_PASSWORD!,
     };
@@ -548,22 +531,15 @@ for (const mode of ["sql", "connectionString"] as const) {
       await page
         .getByRole("combobox", { name: "Authentication", exact: true })
         .selectOption("sql");
-      await page
-        .getByLabel("Username", { exact: true })
-        .fill(sqlConnection.username);
-      await page
-        .getByLabel("Password", { exact: true })
-        .fill(sqlConnection.password);
+      await page.getByLabel("Username", { exact: true }).fill(login.username);
+      await page.getByLabel("Password", { exact: true }).fill(login.password);
     } else {
       await page
         .getByLabel("Connection method")
         .selectOption("connectionString");
-      const quote = (value: string) => `"${value.replaceAll('"', '""')}"`;
       await page
         .getByLabel("Connection string", { exact: true })
-        .fill(
-          `Server=${quote(settings.server)};Database=${quote(databaseName)};User ID=${quote(sqlConnection.username)};Password=${quote(sqlConnection.password)};Encrypt=True;TrustServerCertificate=True;`,
-        );
+        .fill(connectionString(databaseName, login));
     }
     await page
       .getByRole("button", { name: "Save & connect", exact: true })

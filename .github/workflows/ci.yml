@@ -92,7 +92,6 @@ jobs:
           dotnet-version: 10.0.x
       - run: npm ci
       - run: ./scripts/ci/install-sql.ps1
-      - run: npm run build
       - run: npm run test:e2e
       - uses: actions/upload-artifact@v7
         if: failure()

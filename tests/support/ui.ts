@@ -62,24 +62,29 @@ export async function openTable(page: Page, table = "WorkItems") {
   ).toBeVisible();
 }
 
+/** The visible grid's cell for a column, matched by its exact name. */
+export async function gridCell(page: Page, row: number, column: string) {
+  const panel = page.getByRole("tabpanel");
+  const index = await panel
+    .getByRole("columnheader")
+    .evaluateAll(
+      (headers, name) =>
+        headers.findIndex(
+          (header) => header.querySelector("strong")?.textContent === name,
+        ) - 1,
+      column,
+    );
+  expect(index, `Grid column ${column}`).toBeGreaterThanOrEqual(0);
+  return panel.locator(`[data-cell="${row}:${index}"]`);
+}
+
 export async function editCell(
   page: Page,
   row: number,
   column: string,
   value: string,
 ) {
-  const index = await page
-    .getByRole("columnheader")
-    .evaluateAll(
-      (headers, name) =>
-        headers.findIndex((header) => header.textContent?.includes(name)) - 1,
-      column,
-    );
-  expect(index).toBeGreaterThanOrEqual(0);
-  await page
-    .getByRole("tabpanel")
-    .locator(`[data-cell="${row}:${index}"]`)
-    .dblclick();
+  await (await gridCell(page, row, column)).dblclick();
   const nullChoice = page.getByLabel("Set to NULL", { exact: true });
   if (await nullChoice.count()) await nullChoice.uncheck();
   await page.getByLabel("Cell value").fill(value);

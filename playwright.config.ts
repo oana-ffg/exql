@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 process.env.EXQL_TEST_DATABASE ??= `ExqlTest_${randomUUID().replaceAll("-", "")}`;
-process.env.EXQL_TEST_DATA_DIRECTORY = mkdtempSync(
+process.env.EXQL_TEST_DATA_DIRECTORY ??= mkdtempSync(
   join(tmpdir(), "exql-host-"),
 );
 mkdirSync("artifacts", { recursive: true });

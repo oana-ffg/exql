@@ -30,12 +30,17 @@ export function connectionFor(database: string): Connection {
 }
 export const connection = connectionFor(databaseName);
 
-export function connectionString(database = databaseName) {
+export function connectionString(
+  database = databaseName,
+  login = settings.authentication === "sql"
+    ? { username: settings.username, password: settings.password }
+    : null,
+) {
   const quote = (value: string) => `"${value.replaceAll('"', '""')}"`;
   return `Server=${quote(settings.server)};Database=${quote(database)};${
-    settings.authentication === "windows"
-      ? "Integrated Security=True;"
-      : `User ID=${quote(settings.username)};Password=${quote(settings.password)};`
+    login
+      ? `User ID=${quote(login.username)};Password=${quote(login.password)};`
+      : "Integrated Security=True;"
   }Encrypt=True;TrustServerCertificate=True;Connect Timeout=25;`;
 }
 
@@ -54,6 +59,8 @@ export async function execute(
         "powershell.exe",
         [
           "-NoProfile",
+          "-ExecutionPolicy",
+          "Bypass",
           "-File",
           fileURLToPath(new URL("./sql.ps1", import.meta.url)),
           "-Server",

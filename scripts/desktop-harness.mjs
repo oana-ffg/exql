@@ -90,6 +90,8 @@ export function closeDesktop(root) {
     "powershell.exe",
     [
       "-NoProfile",
+      "-ExecutionPolicy",
+      "Bypass",
       "-File",
       fileURLToPath(
         new URL("../tests/support/close-desktop.ps1", import.meta.url),
