@@ -1066,15 +1066,57 @@ dialog fieldset label.check-label {
 .form-columns {
   display: flex;
   gap: 12px;
+  margin: 13px 0;
 }
-.form-columns > label {
+dialog .form-columns > label {
   flex: 1;
   min-width: 0;
+  margin: 0;
+}
+dialog.connection-dialog {
+  width: min(960px, 95vw);
+  height: min(760px, 90vh);
+}
+dialog.connection-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+.connection-dialog-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr);
+  border-top: 1px solid #2c384a;
 }
 .saved-connections {
-  margin: 0 24px 16px;
-  max-height: 210px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 16px;
+  border-right: 1px solid #2c384a;
+}
+.saved-connections-list {
+  flex: 1;
+  min-height: 0;
   overflow: auto;
+  margin-top: 6px;
+}
+dialog form.connection-editor {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 0;
+}
+.connection-editor-fields {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 18px 24px 0;
+}
+.connection-editor .modal-footer {
+  margin: 0;
+  padding: 16px 24px;
+  border-top: 1px solid #2c384a;
 }
 .connection-group {
   display: flex;
@@ -1127,7 +1169,6 @@ dialog fieldset label.check-label {
 }
 .new-connection-button {
   width: 100%;
-  margin-top: 7px;
   background: transparent;
   font-size: 11px;
 }

@@ -158,395 +158,416 @@ export function ConnectionDialog({
   return (
     <Modal
       title="Database connections"
+      className="connection-dialog"
       onClose={() => {
         if (!disabled) onClose();
       }}
     >
-      <div className="saved-connections">
-        {[...new Set(profiles.map((profile) => profile.folder))]
-          .sort()
-          .map((group) => (
-            <div key={group}>
-              <div className="connection-group">
-                <Folder size={12} />
-                {group || "Connections"}
-              </div>
-              {profiles
-                .filter((profile) => profile.folder === group)
-                .map((profile) => (
-                  <div
-                    className={`profile-row ${id === profile.id ? "active" : ""}`}
-                    style={connectionColorStyle(profile.color)}
-                    key={profile.id}
-                    tabIndex={0}
-                    {...context.bind(profile)}
-                  >
-                    <button
-                      type="button"
-                      disabled={disabled}
-                      className="profile-select"
-                      onClick={() => selectProfile(profile)}
-                    >
-                      <Database size={14} />
-                      <span>
-                        <strong>{profile.name}</strong>
-                        <small>
-                          {profile.connection.server} /{" "}
-                          {profile.connection.database}
-                        </small>
-                      </span>
-                    </button>
-                    <button
-                      type="button"
-                      disabled={disabled}
-                      aria-label={`Connect to ${profile.name}`}
-                      className="icon-button"
-                      onClick={() => connectSaved(profile)}
-                    >
-                      <ArrowRight size={16} />
-                    </button>
-                    <button
-                      type="button"
-                      disabled={disabled}
-                      aria-label={`Delete connection ${profile.name}`}
-                      className="icon-button"
-                      onClick={() => void deleteProfile(profile)}
-                    >
-                      <Trash2 size={13} />
-                    </button>
+      <div className="connection-dialog-body">
+        <aside className="saved-connections" aria-label="Saved connections">
+          <button
+            type="button"
+            className="new-connection-button"
+            disabled={disabled}
+            onClick={newConnection}
+          >
+            <Plus size={14} />
+            New connection
+          </button>
+          <div className="saved-connections-list">
+            {profiles.length === 0 && (
+              <p className="hint">No saved connections yet.</p>
+            )}
+            {[...new Set(profiles.map((profile) => profile.folder))]
+              .sort()
+              .map((group) => (
+                <div key={group}>
+                  <div className="connection-group">
+                    <Folder size={12} />
+                    {group || "Connections"}
                   </div>
-                ))}
-            </div>
-          ))}
-        <button
-          type="button"
-          className="new-connection-button"
-          disabled={disabled}
-          onClick={newConnection}
-        >
-          <Plus size={14} />
-          New connection
-        </button>
-      </div>
-      {context.menu && (
-        <ContextMenu
-          position={context.menu}
-          label={context.menu.target.name}
-          onClose={context.close}
-          actions={[
-            {
-              label: "Connect",
-              disabled,
-              run: () => void connectSaved(context.menu!.target),
-            },
-            {
-              label: "Edit",
-              disabled,
-              run: () => selectProfile(context.menu!.target),
-            },
-            {
-              label: "Clone…",
-              disabled,
-              run: () => selectProfile(context.menu!.target, true),
-            },
-            {
-              label: "Delete…",
-              separator: true,
-              disabled,
-              run: () => void deleteProfile(context.menu!.target),
-            },
-          ]}
-        />
-      )}
-      <form
-        onSubmit={async (event) => {
-          event.preventDefault();
-          setError("");
-          setPending(true);
-          try {
-            await onConnect(remember ? await save() : form, selectedColor);
-          } catch (error) {
-            setError((error as Error).message);
-          } finally {
-            setPending(false);
-          }
-        }}
-      >
-        <div className="connection-type">
-          <Database size={24} />
-          <div>
-            <strong>
-              {cloneSource
-                ? `Clone of ${cloneSource.name}`
-                : id
-                  ? name
-                  : "New SQL Server connection"}
-            </strong>
-            <span>SQL Server & Azure SQL Database</span>
+                  {profiles
+                    .filter((profile) => profile.folder === group)
+                    .map((profile) => (
+                      <div
+                        className={`profile-row ${id === profile.id ? "active" : ""}`}
+                        style={connectionColorStyle(profile.color)}
+                        key={profile.id}
+                        tabIndex={0}
+                        {...context.bind(profile)}
+                      >
+                        <button
+                          type="button"
+                          disabled={disabled}
+                          className="profile-select"
+                          onClick={() => selectProfile(profile)}
+                        >
+                          <Database size={14} />
+                          <span>
+                            <strong>{profile.name}</strong>
+                            <small>
+                              {profile.connection.server} /{" "}
+                              {profile.connection.database}
+                            </small>
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          disabled={disabled}
+                          aria-label={`Connect to ${profile.name}`}
+                          className="icon-button"
+                          onClick={() => connectSaved(profile)}
+                        >
+                          <ArrowRight size={16} />
+                        </button>
+                        <button
+                          type="button"
+                          disabled={disabled}
+                          aria-label={`Delete connection ${profile.name}`}
+                          className="icon-button"
+                          onClick={() => void deleteProfile(profile)}
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    ))}
+                </div>
+              ))}
           </div>
-        </div>
-        <fieldset disabled={disabled}>
-          <div className="connection-color-picker">
-            <div role="radiogroup" aria-label="Connection color">
-              <span>Connection color</span>
-              <div className="connection-color-options">
-                {connectionColors.map((option) => (
-                  <input
-                    type="radio"
-                    name="connection-color"
-                    key={option.value}
-                    aria-label={option.name}
-                    title={option.name}
-                    value={option.value}
-                    checked={selectedColor === option.value}
-                    onChange={() => setColor(option.value)}
-                    style={connectionColorStyle(option.value)}
-                  />
-                ))}
-                <input
-                  type="color"
-                  aria-label="Custom connection color"
-                  title="Custom connection color"
-                  value={selectedColor}
-                  onChange={(event) => setColor(event.target.value)}
-                />
+        </aside>
+        {context.menu && (
+          <ContextMenu
+            position={context.menu}
+            label={context.menu.target.name}
+            onClose={context.close}
+            actions={[
+              {
+                label: "Connect",
+                disabled,
+                run: () => void connectSaved(context.menu!.target),
+              },
+              {
+                label: "Edit",
+                disabled,
+                run: () => selectProfile(context.menu!.target),
+              },
+              {
+                label: "Clone…",
+                disabled,
+                run: () => selectProfile(context.menu!.target, true),
+              },
+              {
+                label: "Delete…",
+                separator: true,
+                disabled,
+                run: () => void deleteProfile(context.menu!.target),
+              },
+            ]}
+          />
+        )}
+        <form
+          className="connection-editor"
+          onSubmit={async (event) => {
+            event.preventDefault();
+            setError("");
+            setPending(true);
+            try {
+              await onConnect(remember ? await save() : form, selectedColor);
+            } catch (error) {
+              setError((error as Error).message);
+            } finally {
+              setPending(false);
+            }
+          }}
+        >
+          <div className="connection-editor-fields">
+            <div className="connection-type">
+              <Database size={24} />
+              <div>
+                <strong>
+                  {cloneSource
+                    ? `Clone of ${cloneSource.name}`
+                    : id
+                      ? name
+                      : "New SQL Server connection"}
+                </strong>
+                <span>SQL Server & Azure SQL Database</span>
               </div>
             </div>
-          </div>
-          <label className="check-label">
-            <input
-              type="checkbox"
-              checked={remember}
-              onChange={(e) => {
-                setRemember(e.target.checked);
-                if (!e.target.checked) setKeepPassword(false);
-              }}
-            />
-            Save this connection
-          </label>
-          {remember && (
-            <div className="form-columns">
-              <label>
-                Connection name
-                <input
-                  required
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                />
-              </label>
-              <label>
-                Folder (optional)
-                <input
-                  value={folder}
-                  onChange={(e) => setFolder(e.target.value)}
-                />
-              </label>
-            </div>
-          )}
-          <label>
-            Connection method
-            <select
-              aria-label="Connection method"
-              value={stringMode ? "connectionString" : "fields"}
-              onChange={(event) => {
-                setForm({
-                  ...form,
-                  authentication:
-                    event.target.value === "connectionString"
-                      ? "connectionString"
-                      : "windows",
-                  connectionString: "",
-                  password: "",
-                });
-                setKeepPassword(false);
-                setShowString(false);
-              }}
-            >
-              <option value="fields">Connection details</option>
-              <option value="connectionString">Connection string</option>
-            </select>
-          </label>
-          {stringMode ? (
-            <>
-              {(id || cloneSource) && remember && (
-                <label className="check-label">
-                  <input
-                    type="checkbox"
-                    checked={keepPassword}
-                    onChange={(event) => setKeepPassword(event.target.checked)}
-                  />
-                  {cloneSource
-                    ? `Keep the connection string from ${cloneSource.name}`
-                    : "Keep the saved connection string"}
-                </label>
-              )}
-              {!keepPassword && (
-                <>
-                  <label>
-                    Connection string
+            <fieldset disabled={disabled}>
+              <div className="connection-color-picker">
+                <div role="radiogroup" aria-label="Connection color">
+                  <span>Connection color</span>
+                  <div className="connection-color-options">
+                    {connectionColors.map((option) => (
+                      <input
+                        type="radio"
+                        name="connection-color"
+                        key={option.value}
+                        aria-label={option.name}
+                        title={option.name}
+                        value={option.value}
+                        checked={selectedColor === option.value}
+                        onChange={() => setColor(option.value)}
+                        style={connectionColorStyle(option.value)}
+                      />
+                    ))}
                     <input
-                      type={showString ? "text" : "password"}
-                      required
-                      autoComplete="off"
-                      spellCheck={false}
-                      value={form.connectionString ?? ""}
-                      onChange={(event) =>
-                        set("connectionString", event.target.value)
-                      }
+                      type="color"
+                      aria-label="Custom connection color"
+                      title="Custom connection color"
+                      value={selectedColor}
+                      onChange={(event) => setColor(event.target.value)}
                     />
-                  </label>
-                  <label className="check-label">
-                    <input
-                      type="checkbox"
-                      checked={showString}
-                      onChange={(event) => setShowString(event.target.checked)}
-                    />
-                    Show connection string
-                  </label>
-                </>
-              )}
-              <p className="hint">
-                Paste a SQL Server / Azure SQL connection string with a server
-                and database. Its authentication, encryption, and advanced
-                options are used directly.
-              </p>
-            </>
-          ) : (
-            <>
-              <label>
-                Server
+                  </div>
+                </div>
+              </div>
+              <label className="check-label">
                 <input
-                  required
-                  value={form.server}
-                  onChange={(e) => set("server", e.target.value)}
-                />
-              </label>
-              <label>
-                Database
-                <input
-                  required
-                  value={form.database}
-                  onChange={(e) => set("database", e.target.value)}
-                />
-              </label>
-              <label>
-                Authentication
-                <select
-                  value={form.authentication}
+                  type="checkbox"
+                  checked={remember}
                   onChange={(e) => {
-                    set(
-                      "authentication",
-                      e.target.value as Connection["authentication"],
-                    );
+                    setRemember(e.target.checked);
+                    if (!e.target.checked) setKeepPassword(false);
+                  }}
+                />
+                Save this connection
+              </label>
+              {remember && (
+                <div className="form-columns">
+                  <label>
+                    Connection name
+                    <input
+                      required
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                    />
+                  </label>
+                  <label>
+                    Folder (optional)
+                    <input
+                      value={folder}
+                      onChange={(e) => setFolder(e.target.value)}
+                    />
+                  </label>
+                </div>
+              )}
+              <label>
+                Connection method
+                <select
+                  aria-label="Connection method"
+                  value={stringMode ? "connectionString" : "fields"}
+                  onChange={(event) => {
+                    setForm({
+                      ...form,
+                      authentication:
+                        event.target.value === "connectionString"
+                          ? "connectionString"
+                          : "windows",
+                      connectionString: "",
+                      password: "",
+                    });
                     setKeepPassword(false);
+                    setShowString(false);
                   }}
                 >
-                  <option value="windows">Windows integrated</option>
-                  <option value="sql">SQL Server login</option>
-                  <option value="entra">Microsoft Entra interactive</option>
+                  <option value="fields">Connection details</option>
+                  <option value="connectionString">Connection string</option>
                 </select>
               </label>
-              {form.authentication !== "windows" && (
-                <label>
-                  {form.authentication === "entra"
-                    ? "Email (optional)"
-                    : "Username"}
-                  <input
-                    autoComplete="off"
-                    required={form.authentication === "sql"}
-                    value={form.username}
-                    onChange={(e) => set("username", e.target.value)}
-                  />
-                </label>
-              )}
-              {form.authentication === "sql" && (
+              {stringMode ? (
                 <>
                   {(id || cloneSource) && remember && (
                     <label className="check-label">
                       <input
                         type="checkbox"
                         checked={keepPassword}
-                        onChange={(e) => setKeepPassword(e.target.checked)}
+                        onChange={(event) =>
+                          setKeepPassword(event.target.checked)
+                        }
                       />
                       {cloneSource
-                        ? `Keep the password from ${cloneSource.name}`
-                        : "Keep the saved password"}
+                        ? `Keep the connection string from ${cloneSource.name}`
+                        : "Keep the saved connection string"}
                     </label>
                   )}
                   {!keepPassword && (
+                    <>
+                      <label>
+                        Connection string
+                        <input
+                          type={showString ? "text" : "password"}
+                          required
+                          autoComplete="off"
+                          spellCheck={false}
+                          value={form.connectionString ?? ""}
+                          onChange={(event) =>
+                            set("connectionString", event.target.value)
+                          }
+                        />
+                      </label>
+                      <label className="check-label">
+                        <input
+                          type="checkbox"
+                          checked={showString}
+                          onChange={(event) =>
+                            setShowString(event.target.checked)
+                          }
+                        />
+                        Show connection string
+                      </label>
+                    </>
+                  )}
+                  <p className="hint">
+                    Paste a SQL Server / Azure SQL connection string with a
+                    server and database. Its authentication, encryption, and
+                    advanced options are used directly.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <div className="form-columns">
                     <label>
-                      Password
+                      Server
                       <input
-                        type="password"
+                        required
+                        value={form.server}
+                        onChange={(e) => set("server", e.target.value)}
+                      />
+                    </label>
+                    <label>
+                      Database
+                      <input
+                        required
+                        value={form.database}
+                        onChange={(e) => set("database", e.target.value)}
+                      />
+                    </label>
+                  </div>
+                  <label>
+                    Authentication
+                    <select
+                      value={form.authentication}
+                      onChange={(e) => {
+                        set(
+                          "authentication",
+                          e.target.value as Connection["authentication"],
+                        );
+                        setKeepPassword(false);
+                      }}
+                    >
+                      <option value="windows">Windows integrated</option>
+                      <option value="sql">SQL Server login</option>
+                      <option value="entra">Microsoft Entra interactive</option>
+                    </select>
+                  </label>
+                  {form.authentication !== "windows" && (
+                    <label>
+                      {form.authentication === "entra"
+                        ? "Email (optional)"
+                        : "Username"}
+                      <input
                         autoComplete="off"
-                        value={form.password}
-                        onChange={(e) => set("password", e.target.value)}
+                        required={form.authentication === "sql"}
+                        value={form.username}
+                        onChange={(e) => set("username", e.target.value)}
                       />
                     </label>
                   )}
+                  {form.authentication === "sql" && (
+                    <>
+                      {(id || cloneSource) && remember && (
+                        <label className="check-label">
+                          <input
+                            type="checkbox"
+                            checked={keepPassword}
+                            onChange={(e) => setKeepPassword(e.target.checked)}
+                          />
+                          {cloneSource
+                            ? `Keep the password from ${cloneSource.name}`
+                            : "Keep the saved password"}
+                        </label>
+                      )}
+                      {!keepPassword && (
+                        <label>
+                          Password
+                          <input
+                            type="password"
+                            autoComplete="off"
+                            value={form.password}
+                            onChange={(e) => set("password", e.target.value)}
+                          />
+                        </label>
+                      )}
+                    </>
+                  )}
+                  <label className="check-label">
+                    <input
+                      type="checkbox"
+                      checked={form.encrypt}
+                      onChange={(e) => set("encrypt", e.target.checked)}
+                    />
+                    Encrypt connection
+                  </label>
+                  <label className="check-label">
+                    <input
+                      type="checkbox"
+                      checked={form.trustServerCertificate}
+                      onChange={(e) =>
+                        set("trustServerCertificate", e.target.checked)
+                      }
+                    />
+                    Trust server certificate (local development)
+                  </label>
                 </>
               )}
-              <label className="check-label">
-                <input
-                  type="checkbox"
-                  checked={form.encrypt}
-                  onChange={(e) => set("encrypt", e.target.checked)}
-                />
-                Encrypt connection
-              </label>
-              <label className="check-label">
-                <input
-                  type="checkbox"
-                  checked={form.trustServerCertificate}
-                  onChange={(e) =>
-                    set("trustServerCertificate", e.target.checked)
-                  }
-                />
-                Trust server certificate (local development)
-              </label>
-            </>
-          )}
-        </fieldset>
-        <p className="hint">
-          <ShieldCheck size={14} />
-          Saved passwords and full connection strings are encrypted in Windows
-          Credential Manager for your Windows account. They are never returned
-          to the interface.
-        </p>
-        {error && (
-          <p className="form-error" role="alert">
-            {error}
-          </p>
-        )}
-        <footer className="modal-footer">
-          <button type="button" onClick={onClose} disabled={disabled}>
-            Cancel
-          </button>
-          {remember && (
-            <button
-              type="button"
-              disabled={disabled || !name.trim()}
-              onClick={async () => {
-                setPending(true);
-                setError("");
-                try {
-                  await save();
-                } catch (error) {
-                  setError((error as Error).message);
-                } finally {
-                  setPending(false);
-                }
-              }}
-            >
-              Save only
+            </fieldset>
+            <p className="hint">
+              <ShieldCheck size={14} />
+              Saved passwords and full connection strings are encrypted in
+              Windows Credential Manager for your Windows account. They are
+              never returned to the interface.
+            </p>
+            {error && (
+              <p className="form-error" role="alert">
+                {error}
+              </p>
+            )}
+          </div>
+          <footer className="modal-footer">
+            <button type="button" onClick={onClose} disabled={disabled}>
+              Cancel
             </button>
-          )}
-          <button className="primary" disabled={disabled}>
-            {disabled ? "Connecting…" : remember ? "Save & connect" : "Connect"}
-            <ArrowRight size={15} />
-          </button>
-        </footer>
-      </form>
+            {remember && (
+              <button
+                type="button"
+                disabled={disabled || !name.trim()}
+                onClick={async () => {
+                  setPending(true);
+                  setError("");
+                  try {
+                    await save();
+                  } catch (error) {
+                    setError((error as Error).message);
+                  } finally {
+                    setPending(false);
+                  }
+                }}
+              >
+                Save only
+              </button>
+            )}
+            <button className="primary" disabled={disabled}>
+              {disabled
+                ? "Connecting…"
+                : remember
+                  ? "Save & connect"
+                  : "Connect"}
+              <ArrowRight size={15} />
+            </button>
+          </footer>
+        </form>
+      </div>
     </Modal>
   );
 }
