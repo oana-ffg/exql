@@ -154,21 +154,21 @@ test("uses saved connection names and contains long metadata at narrow window si
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth),
     ).toBe(width);
-    await expect(
-      panel.getByRole("button", { name: "Import SQL folder", exact: true }),
-    ).toBeInViewport();
-    await panel
-      .locator(".sidebar-scroll")
-      .evaluate((element) => (element.scrollTop = element.scrollHeight));
-    await expect(
-      panel.getByRole("button", { name: "Import SQL folder", exact: true }),
-    ).toBeInViewport();
     await panel
       .getByRole("button", { name: "SQL scripts", exact: true })
       .click();
     await expect(
       panel.getByRole("button", { name: "New query folder", exact: true }),
     ).toBeVisible();
+    await expect(
+      panel.getByRole("button", { name: "Add script folder", exact: true }),
+    ).toBeInViewport();
+    await expect(
+      panel.getByRole("button", {
+        name: "Refresh script folders",
+        exact: true,
+      }),
+    ).toBeInViewport();
     await page.screenshot({ path: `artifacts/connection-layout-${width}.png` });
     await panel.getByRole("button", { name: "Database", exact: true }).click();
   }

@@ -20,10 +20,9 @@ export async function request<T>(
     ? (undefined as T)
     : (response.json() as Promise<T>);
 }
-export async function download(
+async function exportResponse(
   path: string,
   body: unknown,
-  name: string,
   signal: AbortSignal,
 ) {
   const response = await fetch(`/api${path}`, {
@@ -34,6 +33,22 @@ export async function download(
   });
   if (!response.ok)
     throw new Error((await response.json()).error ?? "Export failed");
+  return response;
+}
+export async function exportText(
+  path: string,
+  body: unknown,
+  signal: AbortSignal,
+) {
+  return (await exportResponse(path, body, signal)).text();
+}
+export async function download(
+  path: string,
+  body: unknown,
+  name: string,
+  signal: AbortSignal,
+) {
+  const response = await exportResponse(path, body, signal);
   const url = URL.createObjectURL(await response.blob());
   const link = document.createElement("a");
   link.href = url;

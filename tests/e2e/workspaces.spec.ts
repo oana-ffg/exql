@@ -1,6 +1,4 @@
 import { test, expect, type Page } from "@playwright/test";
-import { mkdir, writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
 
 async function isolatedWorkspace(page: Page) {
   const documents: Record<string, unknown> = {
@@ -162,72 +160,6 @@ test("independent database workspaces preserve edits, run concurrently, and rest
         headers: { "X-Exql-Client": "1" },
       });
   }
-});
-
-test("imports nested SQL folders without overwriting saved queries and survives reload", async ({
-  page,
-}) => {
-  const documents = await isolatedWorkspace(page);
-  documents.library = {
-    folders: [],
-    queries: [
-      {
-        id: "existing",
-        name: "Existing query",
-        sql: "SELECT 9;",
-        folderId: "",
-      },
-    ],
-  };
-  const directory = resolve("artifacts", `sql-import-${Date.now()}`, "Scripts");
-  await mkdir(resolve(directory, "Reports"), { recursive: true });
-  await writeFile(
-    resolve(directory, "Root.sql"),
-    "SELECT N'æøå 日本語';",
-    "utf8",
-  );
-  await writeFile(
-    resolve(directory, "Reports", "Report.SQL"),
-    Buffer.concat([
-      Buffer.from([0xff, 0xfe]),
-      Buffer.from("SELECT 42 AS Answer;", "utf16le"),
-    ]),
-  );
-  await writeFile(resolve(directory, "README.txt"), "Ignored");
-  await page.goto("/");
-  await expect(page.getByText("LOCAL", { exact: true })).toHaveCount(0);
-  await expect(page.getByText("One database. A clearer view.")).toHaveCount(0);
-  const chooser = page.waitForEvent("filechooser");
-  await page
-    .getByRole("button", { name: "Import SQL folder", exact: true })
-    .click();
-  await (await chooser).setFiles(directory);
-  await expect(page.getByRole("status")).toContainText(
-    "Imported 2 SQL scripts.",
-  );
-  await expect(
-    page.getByRole("button", { name: "Existing query", exact: true }),
-  ).toBeVisible();
-  await expect(
-    page
-      .locator(".tree-folder")
-      .filter({ has: page.locator("summary", { hasText: "Reports" }) })
-      .getByRole("button", { name: "Report.SQL", exact: true })
-      .last(),
-  ).toBeVisible();
-  await page.getByRole("button", { name: "Report.SQL", exact: true }).click();
-  await expect(page.locator(".cm-content")).toHaveText("SELECT 42 AS Answer;");
-  await page.screenshot({ path: "artifacts/imported-sql-folder.png" });
-  await expect
-    .poll(() => page.evaluate(() => window.exqlPendingWrites))
-    .toBe(0);
-  await page.reload();
-  await page.getByRole("button", { name: "SQL scripts", exact: true }).click();
-  await page.getByRole("button", { name: "Root.sql", exact: true }).click();
-  await expect(page.locator(".cm-content")).toHaveText("SELECT N'æøå 日本語';");
-  await expect(
-    page.getByRole("button", { name: "Existing query", exact: true }),
-  ).toBeVisible();
 });
 
 test("automatic update checks stay quiet and update notices can be dismissed", async ({

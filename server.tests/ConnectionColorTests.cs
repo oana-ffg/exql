@@ -4,6 +4,7 @@ using Xunit;
 
 namespace Exql.Server.Tests;
 
+[Collection("Windows credentials")]
 public sealed class ConnectionColorTests
 {
     [Fact]

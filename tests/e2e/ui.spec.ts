@@ -304,6 +304,9 @@ test("spreadsheet selection, cell editing, filtering and downloads against SQL S
   await page.getByRole("button", { name: "Apply to grid" }).click();
   await expect(page.getByText("1 unsaved cell", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Save changes", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Refresh", exact: true }),
+  ).toBeEnabled();
   await expect(page.locator('[data-cell="0:6"]')).toHaveText(
     "UI verification edit",
   );
@@ -313,6 +316,9 @@ test("spreadsheet selection, cell editing, filtering and downloads against SQL S
     .fill("Test keyboard navigation and selection.");
   await page.getByRole("button", { name: "Apply to grid" }).click();
   await page.getByRole("button", { name: "Save changes", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Refresh", exact: true }),
+  ).toBeEnabled();
   await expect(page.locator('[data-cell="0:6"]')).toHaveText(
     "Test keyboard navigation and selection.",
   );
@@ -422,4 +428,37 @@ test("query editor, result sets, saved folders and query exports", async ({
     .filter({ hasText: folderName })
     .click({ button: "right" });
   await page.getByRole("menuitem", { name: "Delete empty folder" }).click();
+});
+
+test("copies every result set, beyond the loaded page, as one text block", async ({
+  page,
+  context,
+}) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await connect(page);
+  await page
+    .getByRole("button", { name: "New query SQL", exact: true })
+    .click();
+  await page
+    .locator(".cm-content")
+    .fill(
+      "SELECT TOP (250) ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) AS n FROM sys.all_objects; SELECT N'has ``` fence' AS Note, NULL AS Missing; PRINT 'copy check';",
+    );
+  await page.getByRole("button", { name: /Run SQL/ }).click();
+  await expect(page.locator("tbody tr")).toHaveCount(200);
+  await page
+    .getByRole("button", { name: "Copy all as text", exact: true })
+    .click();
+  await expect(page.getByRole("status")).toContainText(
+    "Copied 2 results as text.",
+  );
+  const text = (
+    await page.evaluate(() => navigator.clipboard.readText())
+  ).replaceAll("\r\n", "\n");
+  const rows = Array.from({ length: 250 }, (_, i) => `"${i + 1}"`).join("\n");
+  expect(text).toBe(
+    `Result 1 of 2 · 250 rows\n\`\`\`csv\n"n"\n${rows}\n\`\`\`\n\n` +
+      `Result 2 of 2 · 1 row\n\`\`\`\`csv\n"Note","Missing"\n"has \`\`\` fence",\n\`\`\`\`\n\n` +
+      "Messages\n```text\ncopy check\n```",
+  );
 });

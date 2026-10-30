@@ -185,6 +185,6 @@ export function ContextMenu({
         </div>
       ))}
     </div>,
-    document.body,
+    position.trigger.closest("dialog") ?? document.body,
   );
 }
