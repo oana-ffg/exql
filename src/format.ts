@@ -15,6 +15,11 @@ export const quoteIdentifier = (name: string) =>
   `[${name.replaceAll("]", "]]")}]`;
 const csvCell = (value: Cell) =>
   value === null ? "" : `"${value.replaceAll('"', '""')}"`;
+function parseBit(value: string): boolean {
+  if (value === "true" || value === "1") return true;
+  if (value === "false" || value === "0") return false;
+  throw new Error("Bit values must be true, false, 1, or 0.");
+}
 export function jsonRows(columns: Column[], rows: Cell[][]): string {
   return (
     "[\n" +
@@ -28,9 +33,11 @@ export function jsonRows(columns: Column[], rows: Cell[][]): string {
               const encoded =
                 value === null
                   ? "null"
-                  : numeric.has(column.type) || column.type === "bit"
-                    ? value
-                    : JSON.stringify(value);
+                  : column.type === "bit"
+                    ? String(parseBit(value))
+                    : numeric.has(column.type)
+                      ? value
+                      : JSON.stringify(value);
               return `${JSON.stringify(column.name)}: ${encoded}`;
             })
             .join(", ") +
@@ -48,7 +55,7 @@ export function csvRows(columns: Column[], rows: Cell[][]): string {
 }
 export function sqlValue(column: Column, value: Cell): string {
   if (value === null) return "NULL";
-  if (column.type === "bit") return value === "true" ? "1" : "0";
+  if (column.type === "bit") return parseBit(value) ? "1" : "0";
   if (
     numeric.has(column.type) ||
     ["binary", "varbinary", "timestamp", "rowversion"].includes(column.type)

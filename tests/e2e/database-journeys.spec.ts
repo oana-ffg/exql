@@ -402,6 +402,55 @@ test("copied table INSERTs and query SELECTs execute independently and reproduce
   expect(copied).toEqual(expectedQuery);
 });
 
+test("staged numeric bit aliases copy as booleans and insert the intended SQL values", async ({
+  page,
+  context,
+}) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await execute(
+    databaseName,
+    "CREATE TABLE dbo.BitCopy(Id int NOT NULL PRIMARY KEY, Flag bit NULL); INSERT dbo.BitCopy VALUES(1,0),(2,1),(3,NULL); SELECT * INTO dbo.BitCopyTarget FROM dbo.BitCopy WHERE 1=0;",
+  );
+  await page
+    .getByRole("button", { name: "Refresh database explorer", exact: true })
+    .click();
+  await openTable(page, "BitCopy");
+  await editCell(page, 0, "Flag", "1");
+  await editCell(page, 1, "Flag", "0");
+  await page.getByLabel("Select all rows on page").check();
+  const expected = [
+    { Id: 1, Flag: true },
+    { Id: 2, Flag: false },
+    { Id: 3, Flag: null },
+  ];
+  await page.getByLabel("Copy format").selectOption("json");
+  await page.getByRole("button", { name: "Copy 3 rows", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText(
+    "Copied 3 rows as JSON.",
+  );
+  expect(
+    JSON.parse(await page.evaluate(() => navigator.clipboard.readText())),
+  ).toEqual(expected);
+  await page.getByLabel("Copy format").selectOption("sql");
+  await page.getByRole("button", { name: "Copy 3 rows", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("Copied 3 rows as SQL.");
+  const copied = await page.evaluate(() => navigator.clipboard.readText());
+  await execute(
+    databaseName,
+    copied.replaceAll("[dbo].[BitCopy]", "[dbo].[BitCopyTarget]"),
+  );
+  expect(
+    await rows(databaseName, "SELECT * FROM dbo.BitCopyTarget ORDER BY Id"),
+  ).toEqual(expected);
+  expect(
+    await rows(databaseName, "SELECT * FROM dbo.BitCopy ORDER BY Id"),
+  ).toEqual([
+    { Id: 1, Flag: false },
+    { Id: 2, Flag: true },
+    { Id: 3, Flag: null },
+  ]);
+});
+
 test("script folder Play executes the latest disk contents in the current database", async ({
   page,
 }) => {
