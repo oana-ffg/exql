@@ -302,6 +302,7 @@ test("filter, sort, pagination and table/query exports equal independent SQL acr
   await expect.poll(visible).toEqual(grid.slice(0, 200));
   await page.getByRole("button", { name: "Next page", exact: true }).click();
   await expect.poll(visible).toEqual(grid.slice(200));
+  await editCell(page, 0, "Title", "Unsaved edits must not appear in exports");
   for (const filtered of [false, true]) {
     const wire = await tableRows(
       databaseName,
@@ -328,6 +329,10 @@ test("filter, sort, pagination and table/query exports equal independent SQL acr
     const csv = await download(page, "csv", false, filtered);
     expect(normalizeCsv(csv)).toBe(csvForRows(wire));
   }
+  page.once("dialog", (dialog) => dialog.accept());
+  await page
+    .getByRole("button", { name: "Discard changes", exact: true })
+    .click();
   const response = await runSql(
     page,
     "UPDATE dbo.WorkItems SET Priority=Priority+1 WHERE Id=1; SELECT Id,Title,Priority,Notes FROM dbo.WorkItems ORDER BY Id;",
@@ -354,10 +359,14 @@ test("copied table INSERTs and query SELECTs execute independently and reproduce
   context,
 }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await execute(
+    databaseName,
+    "INSERT dbo.TypeSamples(Id,LargeInteger,ExactDecimal,EventTime,Payload,NullableText,EmptyText) SELECT Id+1,-LargeInteger,-ExactDecimal,EventTime,NULL,N'日本語 æøå ''quoted''',N'nonempty' FROM dbo.TypeSamples;",
+  );
   await openTable(page, "TypeSamples");
   await page.getByLabel("Select all rows on page").check();
   await page.getByLabel("Copy format").selectOption("sql");
-  await page.getByRole("button", { name: "Copy row", exact: true }).click();
+  await page.getByRole("button", { name: "Copy 2 rows", exact: true }).click();
   const inserts = await page.evaluate(() => navigator.clipboard.readText());
   const expected = await tableRows(databaseName, "TypeSamples");
   expect(inserts).not.toContain("[Derived]");
@@ -373,28 +382,34 @@ test("copied table INSERTs and query SELECTs execute independently and reproduce
   expect(actual).toEqual(expected);
   const response = await runSql(
     page,
-    "SELECT LargeInteger,ExactDecimal,EventTime,Payload,NullableText,EmptyText FROM dbo.TypeSamples;",
+    "SELECT LargeInteger,ExactDecimal,EventTime,Payload,NullableText,EmptyText FROM dbo.TypeSamples ORDER BY Id;",
   );
   expect(response.ok()).toBe(true);
   await page.getByLabel("Select all rows on page").check();
   await page.getByLabel("Copy format").selectOption("sql");
-  await page.getByRole("button", { name: "Copy row", exact: true }).click();
+  await page.getByRole("button", { name: "Copy 2 rows", exact: true }).click();
   const select = await page.evaluate(() => navigator.clipboard.readText());
   await execute(
     databaseName,
     `SELECT * INTO dbo.CopiedQuery FROM (${select.replace(/;\s*$/, "")}) AS copied;`,
   );
   const copied = await tableRows(databaseName, "CopiedQuery", "");
-  expect(copied[0]).toEqual(
-    Object.fromEntries(
-      [
-        "LargeInteger",
-        "ExactDecimal",
-        "EventTime",
-        "Payload",
-        "NullableText",
-        "EmptyText",
-      ].map((key) => [key, expected[0][key]]),
+  const sort = (records: Record<string, string | null>[]) =>
+    records.sort((a, b) => a.LargeInteger!.localeCompare(b.LargeInteger!));
+  expect(sort(copied)).toEqual(
+    sort(
+      expected.map((row) =>
+        Object.fromEntries(
+          [
+            "LargeInteger",
+            "ExactDecimal",
+            "EventTime",
+            "Payload",
+            "NullableText",
+            "EmptyText",
+          ].map((key) => [key, row[key]]),
+        ),
+      ),
     ),
   );
 });
