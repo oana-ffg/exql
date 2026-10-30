@@ -23,7 +23,7 @@ export async function attachDesktop(port, version) {
             signal: AbortSignal.timeout(1500),
           });
           return (
-            response.ok() &&
+            response.ok &&
             (await response.json()).some((target) =>
               target.url?.startsWith("http://127.0.0.1:"),
             )

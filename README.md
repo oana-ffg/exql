@@ -86,23 +86,30 @@ The app icon's source is `public/exql.png`, created with built-in imagegen and s
 
 ## Verify
 
-The SQL seed creates only the separate `ExqlDemo` database and its demonstration tables, and does not reset existing databases. Integration tests use this database, temporarily edit its fixture rows, and restore their original values.
+GitHub Actions runs on pull requests and pushes to main:
+
+- Windows checks: formatting, TypeScript/frontend build, Vitest, server tests (including Windows Credential Manager), and desktop build.
+- SQL Server 2019, 2022 and 2025 Linux containers: real API/database journeys against each engine using SQL authentication.
+- Windows SQL Server Express: the complete Edge UI suite, Windows authentication, SQL login and saved connection strings.
+- Portable desktop: package, extract and launch the real app, commit a grid edit, run SQL, save a query, restart, reconnect and verify a native download. A separate real portable update verifies integrity rejection, retry, restart guards and persistence through replacement.
+
+SQL-backed tests create uniquely named `ExqlTest_?` databases from `scripts/fixture.sql`, also used by the optional ExqlDemo seed. Each test drops only the database it created. They never use ExqlDemo. Playwright starts its own devhost with fresh isolated settings and refuses to reuse an already running host. Database assertions use an independent SQL client, including exact numeric and date values, committed mutations, rollback, cancellation, exports and executable clipboard SQL.
+
+With Node.js, .NET, Edge and a local SQL Server available:
 
 ```powershell
-./scripts/seed.ps1
-npm run build
-npm test
-dotnet restore server.tests --configfile NuGet.Config
-dotnet test server.tests --no-restore
-# With the devhost running and Edge installed:
-npm run test:e2e
+npm ci
+npm run check
 npm run format:check
+npm run test:e2e
 ```
 
-The Windows credential tests create randomly named test entries, verify write/read/update/delete and password-free profile persistence, then remove their entries. The SQL integration tests exercise the real SQL Server. Workspace-loading browser regressions intercept workspace responses to verify delayed loads and failed-load retries without changing saved work.
+The single E2E command builds the frontend and manages the host and disposable databases. Defaults are `localhost` and Windows authentication. The account needs permission to create and drop its test databases. To target another test server, set `EXQL_TEST_SERVER` (optionally `hostname,port`), `EXQL_TEST_AUTH` (`windows` or `sql`), `EXQL_TEST_USER` and `EXQL_TEST_PASSWORD`. The Windows observer uses the built-in .NET SQL client; SQL-authenticated runs use the independent tedious driver. The SQL-login persistence journeys additionally need `EXQL_TEST_SQL_USER` and `EXQL_TEST_SQL_PASSWORD`; they are explicitly skipped locally when that login is absent and always configured in CI.
 
-Optional packaged-desktop checks: launch the extracted portable app with `--automation-port 9223`, then run `node scripts/verify-desktop.mjs`. It saves the Local development demo connection and Browse work items query. Restart the EXE with that flag and run `node scripts/verify-desktop-restart.mjs` to verify persistence and a native download. The debugging port is disabled during normal launches.
+The credential tests create randomly named Windows vault entries and remove them. Workspace-loading regressions intercept workspace responses to check delayed loads and failed-load retries. Failed CI jobs upload traces, screenshots, host logs and diagnostics; Playwright retries are disabled.
 
-Run `./scripts/test-updates.ps1` to build and test a real portable `0.0.1 → 0.0.2` update. It uses a fresh directory under `artifacts`, port 9224, and the existing `ExqlDemo` database. It rejects a corrupt package, retries successfully, verifies restart guards against failed/pending saves, a running SQL query and uncommitted grid edits, and checks persisted SQL and connection profiles after replacement and relaunch. It never commits the staged database edit or publishes a release. Screenshots remain in the test directory. The test-only `--automation-update-directory` option accepts a local directory and requires both an automation port and an explicit isolated `--data-directory`; normal builds always use the fixed GitHub repository.
+Run `npm run test:desktop` for the self-contained packaged desktop journeys, or `./scripts/test-updates.ps1` for the real portable `0.0.1 ? 0.0.2` update. Both build into fresh directories under `artifacts`, launch real windows, use isolated settings and disposable databases, and clean up saved test credentials. They never publish a release. Desktop debugging ports 9223 and 9224 must be free. The test-only `--automation-update-directory` requires an automation port and an explicit isolated `--data-directory`; normal launches always use the fixed GitHub release feed.
+
+`./scripts/seed.ps1` remains available to create the separate ExqlDemo demonstration database with `sqlcmd`; it is not required for tests.
 
 Azure SQL offers a free allowance, subject to subscription eligibility and service limits: [Microsoft's current free-offer documentation](https://learn.microsoft.com/en-us/azure/azure-sql/database/free-offer?view=azuresql). Local SQL Server is sufficient for the included integration suite. Live Azure and interactive Entra sign-in require an Azure account/database and are not exercised by local tests.

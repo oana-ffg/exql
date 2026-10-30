@@ -16,6 +16,12 @@ export const test = base.extend<{ isolatedDatabase: void }>({
         await use();
       } finally {
         try {
+          const folders = await request.get("/api/script-folders");
+          expect(folders.ok(), await folders.text()).toBe(true);
+          for (const { id } of await folders.json()) {
+            const response = await request.delete(`/api/script-folders/${id}`);
+            expect(response.ok(), await response.text()).toBe(true);
+          }
           const profiles = await request.get("/api/profiles");
           expect(profiles.ok(), await profiles.text()).toBe(true);
           for (const { id } of await profiles.json()) {

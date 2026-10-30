@@ -1,4 +1,4 @@
-import { databaseName } from "../support/database";
+import { databaseName, DisposableDatabase } from "../support/database";
 import { fillConnection } from "../support/ui";
 import { test, expect } from "../support/fixtures";
 import type { Page } from "@playwright/test";
@@ -36,6 +36,7 @@ test("independent database workspaces preserve edits, run concurrently, and rest
   page,
   request,
 }) => {
+  const other = await new DisposableDatabase().create();
   await isolatedWorkspace(page);
   const sessions: string[] = [];
   const deleted: string[] = [];
@@ -58,7 +59,7 @@ test("independent database workspaces preserve edits, run concurrently, and rest
     await page.getByLabel("Cell value").fill("staged only, never committed");
     await page.getByRole("button", { name: "Apply to grid" }).click();
 
-    await connect(page, "master");
+    await connect(page, other.name);
     await expect(page.getByRole("tab")).toHaveCount(2);
     expect(deleted).toEqual([]);
     await panel
@@ -67,7 +68,7 @@ test("independent database workspaces preserve edits, run concurrently, and rest
     await editor.fill("SELECT DB_NAME() AS DatabaseName;");
     await panel.getByRole("button", { name: /Run SQL/ }).click();
     await expect(
-      panel.getByRole("gridcell", { name: "master", exact: true }),
+      panel.getByRole("gridcell", { name: other.name, exact: true }),
     ).toBeVisible();
     await page.screenshot({ path: "artifacts/multiple-databases.png" });
 
@@ -88,19 +89,19 @@ test("independent database workspaces preserve edits, run concurrently, and rest
     await expect(
       panel.getByRole("button", { name: "Cancel", exact: true }),
     ).toBeVisible();
-    await page.getByRole("tab", { name: /master/ }).click();
+    await page.getByRole("tab", { name: other.name, exact: true }).click();
     await expect(editor).toHaveText("SELECT DB_NAME() AS DatabaseName;");
     expect(await page.evaluate(() => window.exqlDirty)).toBe(true);
     await panel.getByRole("button", { name: /Run SQL/ }).click();
     await expect(
-      panel.getByRole("gridcell", { name: "master", exact: true }),
+      panel.getByRole("gridcell", { name: other.name, exact: true }),
     ).toBeVisible();
     await expect.poll(() => page.evaluate(() => window.exqlDirty)).toBe(false);
     await page.getByRole("tab", { name: databaseName, exact: true }).click();
     await expect(
       panel.getByRole("gridcell", { name: databaseName, exact: true }),
     ).toBeVisible();
-    await page.getByRole("tab", { name: /master/ }).click();
+    await page.getByRole("tab", { name: other.name, exact: true }).click();
     await panel
       .getByRole("button", { name: "Disconnect", exact: true })
       .click();
@@ -139,7 +140,7 @@ test("independent database workspaces preserve edits, run concurrently, and rest
     await page.reload();
     await expect(page.getByRole("tab")).toHaveCount(2);
     await expect(editor).toContainText("WAITFOR DELAY");
-    await page.getByRole("tab", { name: /master/ }).click();
+    await page.getByRole("tab", { name: other.name, exact: true }).click();
     await expect(editor).toHaveText("SELECT DB_NAME() AS DatabaseName;");
     page.once("dialog", (dialog) => dialog.dismiss());
     await page.getByRole("button", { name: /Close workspace master/ }).click();
@@ -149,7 +150,10 @@ test("independent database workspaces preserve edits, run concurrently, and rest
     await expect(page.getByRole("tab")).toHaveCount(1);
     page.once("dialog", (dialog) => dialog.accept());
     await page
-      .getByRole("button", { name: /Close workspace ExqlDemo/ })
+      .getByRole("button", {
+        name: `Close workspace ${databaseName}`,
+        exact: true,
+      })
       .click();
     await expect(page.getByRole("tab")).toHaveCount(1);
     await expect(
@@ -158,6 +162,7 @@ test("independent database workspaces preserve edits, run concurrently, and rest
     await expect(panel.getByRole("grid")).toHaveCount(0);
     await expect(panel.locator(".cm-content")).toHaveCount(0);
   } finally {
+    await other.dispose();
     for (const id of sessions)
       await request.delete(`/api/sessions/${id}`, {
         headers: { "X-Exql-Client": "1" },

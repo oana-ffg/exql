@@ -117,7 +117,7 @@ export async function tableRows(
     const identifier = `[${name.replaceAll("]", "]]")}]`;
     let expression = `CONVERT(nvarchar(max), ${identifier})`;
     if (["binary", "varbinary", "timestamp", "rowversion"].includes(type))
-      expression = `CONVERT(varchar(max), ${identifier}, 1)`;
+      expression = `CONVERT(varchar(max), CONVERT(varbinary(max), ${identifier}), 1)`;
     if (
       [
         "date",
@@ -128,13 +128,19 @@ export async function tableRows(
       ].includes(type)
     )
       expression = `CONVERT(nvarchar(50), ${identifier}, 126)`;
+    if (["datetime", "smalldatetime"].includes(type))
+      expression = `REPLACE(CONVERT(nvarchar(23), CONVERT(datetime, ${identifier}), 121), N' ', N'T')`;
+    if (type === "uniqueidentifier")
+      expression = `LOWER(CONVERT(nvarchar(36), ${identifier}))`;
+    if (type === "money")
+      expression = `CONVERT(nvarchar(30), CONVERT(decimal(19,4), ${identifier}))`;
     if (type === "bit")
       expression = `CASE WHEN ${identifier} IS NULL THEN NULL WHEN ${identifier}=1 THEN N'true' ELSE N'false' END`;
     return `${expression} AS ${identifier}`;
   });
   return rows<Record<string, string | null>>(
     database,
-    `SELECT ${expressions.join(",")} FROM dbo.[${table}] ${suffix}`,
+    `SELECT ${expressions.join(",")} FROM dbo.[${table}] AS source ${suffix.replace(/ORDER BY \[?Id\]?/i, "ORDER BY source.[Id]")}`,
   );
 }
 

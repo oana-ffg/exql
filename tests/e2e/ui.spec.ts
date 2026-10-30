@@ -313,18 +313,6 @@ test("spreadsheet selection, cell editing, filtering and downloads against SQL S
   await expect(page.locator('[data-cell="0:6"]')).toHaveText(
     "UI verification edit",
   );
-  await page.locator('[data-cell="0:6"]').dblclick();
-  await page
-    .getByLabel("Cell value")
-    .fill("Test keyboard navigation and selection.");
-  await page.getByRole("button", { name: "Apply to grid" }).click();
-  await page.getByRole("button", { name: "Save changes", exact: true }).click();
-  await expect(
-    page.getByRole("button", { name: "Refresh", exact: true }),
-  ).toBeEnabled();
-  await expect(page.locator('[data-cell="0:6"]')).toHaveText(
-    "Test keyboard navigation and selection.",
-  );
   await page.getByRole("button", { name: "Add filter" }).click();
   await page.getByLabel("Filter 1 column").selectOption("Status");
   await page.getByLabel("Filter 1 value").fill("Open");

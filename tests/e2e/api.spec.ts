@@ -177,7 +177,7 @@ test("edits commit atomically and stale writes roll back the entire batch", asyn
     });
     expect(conflict.status()).toBe(409);
     const independentAfter = await tableRows(databaseName, "WorkItems");
-    expect(independentAfter[0].Notes).toBe("Test edit ??? ' \"\nline");
+    expect(independentAfter[0].Notes).toBe("Test edit æøå ' \"\nline");
     expect(independentAfter[1]).toEqual(independentBefore[1]);
     const current = await page();
     const index = current.columns.findIndex(

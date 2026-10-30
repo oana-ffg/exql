@@ -50,14 +50,14 @@ try {
     .click();
   await expect(page.getByText("Connected", { exact: true })).toBeVisible();
   await openTable(page);
-  await editCell(page, 0, "Title", "Portable committed edit ??? ???");
+  await editCell(page, 0, "Title", "Portable committed edit æøå 日本語");
   await page.getByRole("button", { name: "Save changes", exact: true }).click();
   await expect(
     page.getByRole("button", { name: "Save changes", exact: true }),
   ).toHaveCount(0);
   assert.deepEqual(
     await rows(database.name, "SELECT Title FROM dbo.WorkItems WHERE Id=1"),
-    [{ Title: "Portable committed edit ??? ???" }],
+    [{ Title: "Portable committed edit æøå 日本語" }],
   );
   const sql =
     "INSERT dbo.CommandLog VALUES(1,N'Portable SQL'); SELECT Id,Title,Status,Priority FROM dbo.WorkItems ORDER BY Id;";

@@ -9,12 +9,12 @@
     "build": "tsc -b && vite build",
     "icon": "node scripts/generate-icon.mjs",
     "test": "vitest run",
-    "test:e2e": "playwright test",
+    "test:e2e": "npm run build && playwright test",
     "check": "npm run build && npm test && dotnet restore server.tests --configfile NuGet.Config && dotnet test server.tests --no-restore && dotnet restore desktop --configfile NuGet.Config && dotnet build desktop --no-restore",
     "start": "dotnet run --project desktop",
     "format": "prettier --write src tests shared scripts/*.mjs scripts/ci/*.mjs .github *.json *.ts *.md",
     "format:check": "prettier --check src tests shared scripts/*.mjs scripts/ci/*.mjs .github *.json *.ts *.md",
-    "test:desktop": "pwsh -NoProfile -File scripts/test-desktop.ps1"
+    "test:desktop": "powershell.exe -NoProfile -File scripts/test-desktop.ps1"
   },
   "dependencies": {
     "@codemirror/commands": "^6.11.0",

@@ -26,7 +26,7 @@ export default defineConfig({
     screenshot: "only-on-failure",
   },
   webServer: {
-    command: `dotnet run --project devhost --no-launch-profile -- --DataDirectory "${process.env.EXQL_TEST_DATA_DIRECTORY}"`,
+    command: "node scripts/ci/start-host.mjs",
     url: "http://127.0.0.1:5274",
     reuseExistingServer: false,
     timeout: 120_000,

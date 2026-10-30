@@ -10,7 +10,7 @@ export async function fillConnection(page: Page, database = databaseName) {
     .getByRole("textbox", { name: "Database", exact: true })
     .fill(database);
   await page
-    .getByLabel("Authentication", { exact: true })
+    .getByRole("combobox", { name: "Authentication", exact: true })
     .selectOption(connection.authentication);
   if (connection.authentication === "sql") {
     await page
@@ -38,7 +38,10 @@ export async function connect(page: Page, database = databaseName) {
 export async function openTable(page: Page, table = "WorkItems") {
   await page
     .getByRole("complementary")
-    .getByRole("button", { name: table, exact: true })
+    .getByRole("button", {
+      name: table === "OpenWorkItems" ? `${table} view` : table,
+      exact: true,
+    })
     .click();
   await expect(page.locator("tbody tr").first()).toBeVisible();
 }

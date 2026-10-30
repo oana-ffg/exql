@@ -1,29 +1,23 @@
 import assert from "node:assert/strict";
 import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve, join } from "node:path";
-import { execFileSync, spawn } from "node:child_process";
-import { createServer } from "node:net";
-import { chromium, expect } from "@playwright/test";
+import { expect } from "@playwright/test";
+import { DisposableDatabase } from "../tests/support/database.ts";
+import { fillConnection } from "../tests/support/ui.ts";
+import {
+  assertFreePort,
+  attachDesktop,
+  launchDesktop,
+  closeDesktop,
+  deleteDesktopProfiles,
+} from "./desktop-harness.mjs";
 
 // The PowerShell runner supplies a fresh app folder and two real Velopack releases.
 const root = resolve(process.argv[2] ?? "artifacts/update-test");
-const app = join(root, "app", "ExQL.exe");
 const data = join(root, "state");
 const feed = join(root, "live-feed");
 const packages = resolve(process.argv[3] ?? join(root, "feed"));
-const endpoint = "http://127.0.0.1:9224";
-// Never connect this test to another app that is already using the debug port.
-await new Promise((resolve, reject) => {
-  const probe = createServer();
-  probe.once("error", () =>
-    reject(
-      new Error(
-        "Port 9224 is already in use. Close the previous test instance first.",
-      ),
-    ),
-  );
-  probe.listen(9224, "127.0.0.1", () => probe.close(resolve));
-});
+await assertFreePort(9224);
 const manifest = JSON.parse(
   await readFile(join(packages, "releases.win-x64.json"), "utf8"),
 );
@@ -42,62 +36,23 @@ await writeFile(
 );
 await mkdir(data, { recursive: true });
 
-async function attach(version) {
-  let attached;
-  await expect
-    .poll(
-      async () => {
-        try {
-          if (
-            !(
-              await fetch(`${endpoint}/json/version`, {
-                signal: AbortSignal.timeout(1500),
-              })
-            ).ok
-          )
-            return false;
-          const browser = await chromium.connectOverCDP(endpoint, {
-            timeout: 2000,
-          });
-          const page =
-            browser
-              .contexts()[0]
-              .pages()
-              .find((item) => item.url().startsWith("http://127.0.0.1:")) ??
-            browser.contexts()[0].pages()[0];
-          if (!page) return false;
-          await expect(page.locator(".update-version")).toHaveText(
-            `ExQL ${version}`,
-            { timeout: 5000 },
-          );
-          attached = { browser, page };
-          return true;
-        } catch {
-          return false;
-        }
-      },
-      { timeout: 45_000 },
-    )
-    .toBe(true);
-  return attached;
-}
-
 let page;
+let database;
+let context;
+let tracing = false;
 const errors = [];
 try {
-  spawn(
-    app,
-    [
-      "--automation-port",
-      "9224",
-      "--data-directory",
-      data,
-      "--automation-update-directory",
-      feed,
-    ],
-    { cwd: root, windowsHide: true, stdio: "ignore" },
-  ).unref();
-  ({ page } = await attach("0.0.1"));
+  database = await new DisposableDatabase().create();
+  ({ page, context } = await launchDesktop(root, 9224, [
+    "--automation-update-directory",
+    feed,
+  ]));
+  await context.tracing.start({
+    screenshots: true,
+    snapshots: true,
+    sources: true,
+  });
+  tracing = true;
   page.on("pageerror", (error) => errors.push(error.message));
   await expect(page.locator(".update-version")).toHaveText("ExQL 0.0.1");
   await page
@@ -183,10 +138,7 @@ try {
   await page
     .getByLabel("Connection name", { exact: true })
     .fill("Updater test database");
-  await page
-    .getByRole("textbox", { name: "Database", exact: true })
-    .fill("ExqlDemo");
-  await page.getByLabel("Trust server certificate (local development)").check();
+  await fillConnection(page, database.name);
   await page
     .getByRole("button", { name: "Save & connect", exact: true })
     .click();
@@ -253,9 +205,17 @@ try {
     ].map(async (file) => [file, await readFile(join(data, file), "utf8")]),
   );
 
+  await context.tracing.stop({ path: join(root, "before-update-trace.zip") });
+  tracing = false;
   await page.getByRole("button", { name: "Restart to update" }).click();
   await expect.poll(() => page.isClosed(), { timeout: 30_000 }).toBe(true);
-  ({ page } = await attach("0.0.2"));
+  ({ page, context } = await attachDesktop(9224, "0.0.2"));
+  await context.tracing.start({
+    screenshots: true,
+    snapshots: true,
+    sources: true,
+  });
+  tracing = true;
   page.on("pageerror", (error) => errors.push(error.message));
   await expect(page.locator(".update-version")).toHaveText("ExQL 0.0.2", {
     timeout: 30_000,
@@ -290,24 +250,16 @@ try {
 } catch (error) {
   console.error(error);
   if (page && !page.isClosed())
-    await page
-      .screenshot({ path: join(root, "update-failure.png") })
-      .catch(() => {});
+    await page.screenshot({ path: join(root, "update-failure.png") });
   throw error;
 } finally {
-  // Close only the test executable, never the user's other ExQL windows.
-  const executable = join(root, "app", "current", "ExQL.exe").replaceAll(
-    "'",
-    "''",
-  );
-  execFileSync(
-    "powershell.exe",
-    [
-      "-NoProfile",
-      "-Command",
-      `Get-Process ExQL -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq '${executable}' } | ForEach-Object { [void]$_.CloseMainWindow(); if (!$_.WaitForExit(3000)) { $_.Kill() } }; exit 0`,
-    ],
-    { windowsHide: true },
-  );
+  try {
+    if (tracing)
+      await context.tracing.stop({ path: join(root, "update-trace.zip") });
+    if (page && !page.isClosed()) await deleteDesktopProfiles(page);
+  } finally {
+    closeDesktop(root);
+    await database?.dispose();
+  }
 }
 process.exit(0);
