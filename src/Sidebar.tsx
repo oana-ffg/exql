@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import {
   ChevronDown,
   Code2,
@@ -11,8 +11,9 @@ import {
   Trash2,
   Pencil,
   RefreshCw,
-  FolderInput,
 } from "lucide-react";
+import { ScriptFoldersPanel } from "./ScriptFoldersPanel";
+import type { ScriptFoldersState, OpenScript } from "./scriptFolders";
 import type { Library, SavedQuery, Session, TableId } from "./types";
 import { ContextMenu, useContextMenu, type MenuAction } from "./ContextMenu";
 import { copyText } from "./clipboard";
@@ -36,7 +37,8 @@ export function Sidebar({
   onConnect,
   onNewQuery,
   onFolder,
-  onImport,
+  scriptFolders,
+  onScript,
   onRenameFolder,
   onDeleteFolder,
   onDeleteQuery,
@@ -53,7 +55,8 @@ export function Sidebar({
   onConnect: () => void;
   onNewQuery: () => void;
   onFolder: () => void;
-  onImport: (files: File[]) => void;
+  scriptFolders: ScriptFoldersState;
+  onScript: (script: OpenScript, run?: boolean) => void;
   onRenameFolder: (id: string) => void;
   onDeleteFolder: (id: string) => void;
   onDeleteQuery: (id: string) => void;
@@ -61,7 +64,6 @@ export function Sidebar({
 }) {
   const [search, setSearch] = useState("");
   const [panel, setPanel] = useState<"database" | "scripts">("database");
-  const importInput = useRef<HTMLInputElement>(null);
   const context = useContextMenu<ExplorerMenu>();
   function menuActions(target: ExplorerMenu): MenuAction[] {
     if (target.kind === "table") {
@@ -158,34 +160,6 @@ export function Sidebar({
         <Code2 size={16} />
         New query<span>SQL</span>
       </button>
-      <button
-        className="import-folder"
-        disabled={disabled}
-        onClick={() => {
-          setPanel("scripts");
-          importInput.current?.click();
-        }}
-      >
-        <FolderInput size={15} /> Import SQL folder
-      </button>
-      <input
-        ref={(input) => {
-          importInput.current = input;
-          if (input) input.webkitdirectory = true;
-        }}
-        type="file"
-        aria-label="Import SQL folder"
-        hidden
-        multiple
-        onChange={(event) => {
-          const files = Array.from(event.currentTarget.files ?? []);
-          event.currentTarget.value = "";
-          if (files.length) {
-            setPanel("scripts");
-            onImport(files);
-          }
-        }}
-      />
       <div className="sidebar-sections" aria-label="Explorer sections">
         <button
           aria-pressed={panel === "database"}
@@ -195,7 +169,10 @@ export function Sidebar({
         </button>
         <button
           aria-pressed={panel === "scripts"}
-          onClick={() => setPanel("scripts")}
+          onClick={() => {
+            setPanel("scripts");
+            void scriptFolders.refresh();
+          }}
         >
           <Folder size={14} /> SQL scripts
         </button>
@@ -262,6 +239,13 @@ export function Sidebar({
           </>
         ) : (
           <>
+            <ScriptFoldersPanel
+              state={scriptFolders}
+              disabled={disabled}
+              canRun={!!session && !disabled}
+              onOpen={onScript}
+              onNotice={onNotice}
+            />
             <div className="section-heading saved-heading">
               SAVED QUERIES
               <button

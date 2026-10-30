@@ -4,7 +4,7 @@ using Microsoft.Data.SqlClient;
 namespace Exql;
 
 public sealed record ConnectionProfile(string Id, string Name, string Folder, ConnectionRequest Connection, string? Color = null);
-public sealed record SaveProfileRequest(string? Id, string Name, string Folder, ConnectionRequest Connection, bool KeepPassword = false, string? Color = null);
+public sealed record SaveProfileRequest(string? Id, string Name, string Folder, ConnectionRequest Connection, bool KeepPassword = false, string? Color = null, string? CredentialSourceId = null);
 
 public sealed class ConnectionProfiles(AppPaths paths)
 {
@@ -43,16 +43,20 @@ public sealed class ConnectionProfiles(AppPaths paths)
         {
             var profiles = Load();
             var existing = request.Id is null ? null : profiles.Find(p => p.Id == request.Id) ?? throw new InputException("Saved connection not found.", 404);
+            var source = existing ?? (request.CredentialSourceId is null ? null : profiles.Find(p => p.Id == request.CredentialSourceId)
+                ?? throw new InputException("Credential source connection not found.", 404));
             var id = existing?.Id ?? Guid.NewGuid().ToString("N");
             var color = request.Color is not null ? ConnectionColors.Normalize(request.Color)
                 : existing?.Color ?? ConnectionColors.Next(profiles.Select(profile => profile.Color));
             var connection = request.Connection;
+            if (request.KeepPassword && source is not null && source.Connection.Authentication != connection.Authentication)
+                throw new InputException("The saved credential uses a different authentication type.");
             if (connection.Authentication == "connectionString")
             {
                 if (request.KeepPassword)
                 {
-                    if (existing?.Connection.Authentication != "connectionString") throw new InputException("No saved connection string is available.");
-                    connection = connection with { ConnectionString = WindowsCredentials.Read(id) };
+                    if (source?.Connection.Authentication != "connectionString") throw new InputException("No saved connection string is available.");
+                    connection = connection with { ConnectionString = WindowsCredentials.Read(source.Id) };
                 }
                 var value = Sessions.BuildConnectionString(connection);
                 var parsed = new SqlConnectionStringBuilder(value);
@@ -65,7 +69,8 @@ public sealed class ConnectionProfiles(AppPaths paths)
                 _ = Sessions.BuildConnectionString(connection);
                 if (connection.Authentication == "sql")
                 {
-                    if (request.KeepPassword && existing?.Connection.Authentication == "sql") _ = WindowsCredentials.Read(id);
+                    if (request.KeepPassword && source?.Connection.Authentication == "sql")
+                        WindowsCredentials.Write(id, connection.Username ?? "", WindowsCredentials.Read(source.Id));
                     else WindowsCredentials.Write(id, connection.Username ?? "", connection.Password ?? "");
                 }
                 else if (existing?.Connection.Authentication is "sql" or "connectionString") WindowsCredentials.Delete(id);

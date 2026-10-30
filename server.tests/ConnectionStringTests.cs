@@ -5,6 +5,7 @@ using Xunit;
 
 namespace Exql.Server.Tests;
 
+[Collection("Windows credentials")]
 public sealed class ConnectionStringTests
 {
     private static ConnectionRequest Request(string? value) => new("", "", "connectionString", null, null, ConnectionString: value);

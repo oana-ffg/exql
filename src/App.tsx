@@ -6,6 +6,7 @@ import {
   useState,
 } from "react";
 import { Database, LoaderCircle, Plus, X } from "lucide-react";
+import { useScriptFolders } from "./scriptFolders";
 import { request } from "./api";
 import { ConnectionDialog } from "./ConnectionDialog";
 import { UpdateNotice } from "./UpdateNotice";
@@ -61,6 +62,7 @@ export default function App() {
   const [connecting, setConnecting] = useState(false);
   const [closing, setClosing] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const scriptFolders = useScriptFolders(setError);
   const activeTab = useRef<HTMLButtonElement>(null);
   const tabList = useRef<HTMLDivElement>(null);
   const drafts = draftsFrom(scratch);
@@ -330,6 +332,7 @@ export default function App() {
               ),
             )
           }
+          scriptFolders={scriptFolders}
           library={library}
           setLibrary={setLibrary}
           onConnect={() => setConnectionOpen(true)}

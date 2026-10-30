@@ -4,6 +4,7 @@ import {
   jsonRows,
   quoteIdentifier,
   querySqlRows,
+  resultsText,
   sqlRows,
 } from "../../src/format";
 import type { Column } from "../../src/types";
@@ -73,6 +74,30 @@ describe("lossless copy formats", () => {
   test("query results copy as executable SELECT without invented table names", () => {
     expect(querySqlRows([column("n", "int")], [["1"], ["2"]])).toBe(
       "SELECT 1 AS [n]\nUNION ALL\nSELECT 2 AS [n];",
+    );
+  });
+});
+describe("copy all results as text", () => {
+  test("labels each result, keeps fences literal, and appends messages and affected rows", () => {
+    expect(
+      resultsText(
+        [
+          { rowCount: 1, csv: '"a"\r\n"1"\r\n' },
+          { rowCount: 1200, csv: '"code"\r\n"``` x ````"\r\n' },
+        ],
+        3,
+        ["first", "second"],
+      ),
+    ).toBe(
+      'Result 1 of 2 · 1 row\n```csv\n"a"\r\n"1"\n```\n\n' +
+        'Result 2 of 2 · 1,200 rows\n`````csv\n"code"\r\n"``` x ````"\n`````\n\n' +
+        "Messages\n```text\nfirst\nsecond\n```\n\n" +
+        "3 rows affected",
+    );
+  });
+  test("omits messages and affected rows when absent", () => {
+    expect(resultsText([{ rowCount: 0, csv: '"a"\r\n' }], -1, [])).toBe(
+      'Result 1 of 1 · 0 rows\n```csv\n"a"\n```',
     );
   });
 });

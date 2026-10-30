@@ -4,8 +4,46 @@ using Xunit;
 
 namespace Exql.Server.Tests;
 
+[Collection("Windows credentials")]
 public sealed class CredentialTests
 {
+    [Theory]
+    [InlineData("sql")]
+    [InlineData("connectionString")]
+    public void ClonesCopyCredentialsIntoIndependentEntries(string authentication)
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        var root = Path.Combine(Path.GetTempPath(), "exql-clone-" + Guid.NewGuid().ToString("N"));
+        var store = new ConnectionProfiles(new AppPaths(root));
+        List<string> ids = [];
+        try
+        {
+            var connection = new ConnectionRequest("localhost", "ExqlDemo", authentication, "test-user", "clone-secret",
+                ConnectionString: "Server=localhost;Database=ExqlDemo;User ID=test-user;Password=clone-secret;TrustServerCertificate=True");
+            var source = store.Save(new(null, "Source", "Tests", connection));
+            ids.Add(source.Id);
+            var clone = store.Save(new(null, "Source (copy)", "Tests", source.Connection, KeepPassword: true, CredentialSourceId: source.Id));
+            ids.Add(clone.Id);
+            Assert.NotEqual(source.Id, clone.Id);
+            Assert.Equal(WindowsCredentials.Read(source.Id), WindowsCredentials.Read(clone.Id));
+            Assert.Contains("clone-secret", WindowsCredentials.Read(source.Id));
+            Assert.Throws<InputException>(() => store.Save(new(null, "Mismatch", "", source.Connection with
+            {
+                Authentication = authentication == "sql" ? "connectionString" : "sql",
+            }, KeepPassword: true, CredentialSourceId: source.Id)));
+            Assert.Equal(404, Assert.Throws<InputException>(() => store.Save(new(null, "Missing source", "", source.Connection,
+                KeepPassword: true, CredentialSourceId: Guid.NewGuid().ToString("N")))).Status);
+            store.Delete(clone.Id);
+            Assert.Throws<InputException>(() => WindowsCredentials.Read(clone.Id));
+            Assert.Contains("clone-secret", WindowsCredentials.Read(source.Id));
+        }
+        finally
+        {
+            foreach (var id in ids) WindowsCredentials.Delete(id);
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
     [Fact]
     public void WindowsVaultRoundTripAndDeletion()
     {

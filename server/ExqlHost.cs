@@ -17,6 +17,7 @@ public static class ExqlHost
         builder.Services.AddSingleton<Sessions>();
         builder.Services.AddSingleton(new AppPaths(builder.Configuration["DataDirectory"] ?? AppPaths.DefaultRoot));
         builder.Services.AddSingleton<ConnectionProfiles>();
+        builder.Services.AddSingleton<ScriptFolders>();
         builder.Services.AddSingleton<WorkspaceStore>();
         builder.Environment.WebRootFileProvider = new ManifestEmbeddedFileProvider(Assembly.GetExecutingAssembly(), "wwwroot");
         builder.Logging.AddFilter("Microsoft.AspNetCore", LogLevel.Warning);
@@ -49,6 +50,11 @@ public static class ExqlHost
         });
 
         app.MapGet("/api/profiles", (ConnectionProfiles profiles) => profiles.List());
+        app.MapGet("/api/script-folders", (ScriptFolders folders) => folders.List());
+        app.MapPost("/api/script-folders", (AddScriptFolderRequest request, ScriptFolders folders) => folders.Add(request.Path));
+        app.MapDelete("/api/script-folders/{id}", (string id, ScriptFolders folders) => { folders.Delete(id); return Results.NoContent(); });
+        app.MapGet("/api/script-folders/{id}/scripts", (string id, ScriptFolders folders) => folders.Scripts(id));
+        app.MapGet("/api/script-folders/{id}/script", (string id, string path, ScriptFolders folders) => folders.Read(id, path));
         app.MapGet("/api/workspace/{key}", (string key, WorkspaceStore workspace) => new { value = workspace.Read(key) });
         app.MapPost("/api/workspace/{key}", (string key, System.Text.Json.JsonElement value, WorkspaceStore workspace) => { workspace.Write(key, value); return Results.NoContent(); });
         app.MapPost("/api/profiles", (SaveProfileRequest request, ConnectionProfiles profiles) => profiles.Save(request));

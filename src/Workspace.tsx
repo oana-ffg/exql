@@ -10,6 +10,7 @@ import {
   ArrowLeft,
   ArrowRight,
   Check,
+  Copy,
   Code2,
   Database,
   Download,
@@ -22,12 +23,20 @@ import {
   Table2,
   X,
 } from "lucide-react";
-import { request, download } from "./api";
+import { request, download, exportText } from "./api";
 import { DataGrid } from "./DataGrid";
 import { FilterBar } from "./FilterBar";
 import { Modal } from "./Modal";
+import {
+  readScript,
+  scriptFullPath,
+  type OpenScript,
+  type ScriptFoldersState,
+} from "./scriptFolders";
 import { Sidebar } from "./Sidebar";
-import { importSqlFolder, folderPath } from "./queryLibrary";
+import { folderPath } from "./queryLibrary";
+import { copyText } from "./clipboard";
+import { resultsText } from "./format";
 import type {
   Edit,
   Filter,
@@ -51,6 +60,7 @@ export function Workspace({
   sql,
   setSql,
   library,
+  scriptFolders,
   setLibrary,
   onConnect,
   onActivity,
@@ -62,6 +72,7 @@ export function Workspace({
   sql: string;
   setSql: (sql: string) => void;
   library: Library;
+  scriptFolders: ScriptFoldersState;
   setLibrary: (change: Library | ((current: Library) => Library)) => void;
   onConnect: () => void;
   onActivity: (id: string, state: { busy: string; edits: number }) => void;
@@ -75,8 +86,11 @@ export function Workspace({
   const [filters, setFilters] = useState<Filter[]>([]);
   const [match, setMatch] = useState<"all" | "any">("all");
   const [edits, setEdits] = useState<Edit[]>([]);
+  const [editorGeneration, setEditorGeneration] = useState(0);
   const [selection, setSelection] = useState("");
   const [savedId, setSavedId] = useState<string | null>(null);
+  const [script, setScript] = useState<OpenScript | null>(null);
+  const [loadedSql, setLoadedSql] = useState("");
   const [saveOpen, setSaveOpen] = useState(false);
   const [queryResponse, setQueryResponse] = useState<QueryResponse | null>(
     null,
@@ -94,6 +108,17 @@ export function Workspace({
   const data = mode === "table" ? tableData : queryData;
   const offset = mode === "table" ? (tableRequest?.offset ?? 0) : queryOffset;
   const result = queryResponse?.results[resultIndex];
+  const scriptFolder = scriptFolders.folders.find(
+    (folder) => folder.id === script?.folderId,
+  );
+  const scriptTitle =
+    script && scriptFolder
+      ? scriptFullPath(scriptFolder, script.path)
+      : undefined;
+  const currentScript = useRef({ script, sql, loadedSql });
+  useLayoutEffect(() => {
+    currentScript.current = { script, sql, loadedSql };
+  });
   const savedQuery = library.queries.find((query) => query.id === savedId);
 
   useLayoutEffect(() => {
@@ -104,6 +129,40 @@ export function Workspace({
     const timeout = setTimeout(() => setNotice(""), 7000);
     return () => clearTimeout(timeout);
   }, [notice]);
+
+  useEffect(() => {
+    if (!script || busy) return;
+    let abort: AbortController | null = null;
+    const focus = async () => {
+      abort?.abort();
+      const next = new AbortController();
+      abort = next;
+      try {
+        const content = await readScript(script, next.signal);
+        if (next.signal.aborted) return;
+        const current = currentScript.current;
+        if (current.script !== script || content.sql === current.loadedSql)
+          return;
+        if (current.sql === current.loadedSql) {
+          setSql(content.sql);
+          setLoadedSql(content.sql);
+          setSelection("");
+          setEditorGeneration((value) => value + 1);
+          setNotice("Reloaded " + script.name + " from disk.");
+        } else
+          setNotice(
+            script.name + " changed on disk. Reload from disk to see it.",
+          );
+      } catch (error) {
+        if (!next.signal.aborted) setError((error as Error).message);
+      }
+    };
+    window.addEventListener("focus", focus);
+    return () => {
+      abort?.abort();
+      window.removeEventListener("focus", focus);
+    };
+  }, [script, busy]);
 
   const endpoint = (path: string) => `/sessions/${session!.id}${path}`;
   async function perform(
@@ -168,7 +227,10 @@ export function Workspace({
   function openQuery(query?: SavedQuery, initialSql = "") {
     if (!discardEdits()) return;
     setMode("query");
+    setScript(null);
+    setLoadedSql("");
     setSelection("");
+    setEditorGeneration((value) => value + 1);
     if (query) {
       setSql(query.sql);
       setSavedId(query.id);
@@ -180,23 +242,80 @@ export function Workspace({
     setQueryResponse(null);
     setGeneration((value) => value + 1);
   }
-  async function runQuery() {
-    if (!session || !(selection || sql).trim() || busy) return;
-    await perform("Running SQL", async (signal) => {
-      const response = await request<QueryResponse>(
-        endpoint("/query"),
-        { sql: selection || sql },
-        signal,
+  async function executeQuery(text: string, signal: AbortSignal) {
+    const response = await request<QueryResponse>(
+      endpoint("/query"),
+      { sql: text },
+      signal,
+    );
+    setQueryResponse(response);
+    setResultIndex(0);
+    setQueryData(response.results[0]?.page ?? null);
+    setQueryOffset(0);
+    setGeneration((value) => value + 1);
+    if (!response.results.length)
+      setNotice(
+        `Query completed. ${Math.max(0, response.recordsAffected)} rows affected.`,
       );
-      setQueryResponse(response);
-      setResultIndex(0);
-      setQueryData(response.results[0]?.page ?? null);
-      setQueryOffset(0);
+  }
+  async function runQuery() {
+    const text = selection || sql;
+    if (!session || !text.trim() || busy) return;
+    await perform("Running SQL", (signal) => executeQuery(text, signal));
+  }
+  async function openScript(next: OpenScript, run = false) {
+    if (busy || (run && !session) || !discardEdits()) return;
+    await perform(run ? "Running SQL" : "Opening script", async (signal) => {
+      const content = await readScript(next, signal);
+      setMode("query");
+      setSavedId(null);
+      setScript(next);
+      setLoadedSql(content.sql);
+      setSql(content.sql);
+      setSelection("");
+      setEditorGeneration((value) => value + 1);
+      setQueryData(null);
+      setQueryResponse(null);
       setGeneration((value) => value + 1);
-      if (!response.results.length)
-        setNotice(
-          `Query completed. ${Math.max(0, response.recordsAffected)} rows affected.`,
-        );
+      if (run && content.sql.trim()) await executeQuery(content.sql, signal);
+    });
+  }
+  async function copyAllResults(response: QueryResponse) {
+    await perform("Copying results", async (signal) => {
+      // Snapshots hold every row; the grid only has the visible page.
+      const results = [];
+      for (const result of response.results)
+        results.push({
+          rowCount: result.rowCount,
+          csv: await exportText(
+            endpoint("/export"),
+            { resultId: result.id, format: "csv" },
+            signal,
+          ),
+        });
+      await copyText(
+        resultsText(results, response.recordsAffected, response.messages),
+        setNotice,
+        `Copied ${results.length} ${results.length === 1 ? "result" : "results"} as text.`,
+      );
+    });
+  }
+  async function reloadScript() {
+    if (!script || busy) return;
+    if (
+      sql !== loadedSql &&
+      !window.confirm(
+        "Discard editor changes and reload " + script.name + " from disk?",
+      )
+    )
+      return;
+    await perform("Reloading script", async (signal) => {
+      const content = await readScript(script, signal);
+      setSql(content.sql);
+      setLoadedSql(content.sql);
+      setSelection("");
+      setEditorGeneration((value) => value + 1);
+      setNotice("Reloaded " + script.name + " from disk.");
     });
   }
   async function saveEdits() {
@@ -311,23 +430,8 @@ export function Workspace({
         onNotice={setNotice}
         onNewQuery={() => openQuery()}
         onConnect={onConnect}
-        onImport={(files) =>
-          void perform("Importing SQL folder", async (signal) => {
-            const imported = await importSqlFolder(files, signal);
-            setLibrary((current) => {
-              const next = {
-                folders: [...current.folders, ...imported.folders],
-                queries: [...current.queries, ...imported.queries],
-              };
-              if (JSON.stringify(next).length > 4 * 1024 * 1024)
-                throw new Error(
-                  "Saved queries would exceed the 4 MiB workspace limit. Import a smaller folder.",
-                );
-              return next;
-            });
-            setNotice(`Imported ${imported.queries.length} SQL scripts.`);
-          })
-        }
+        scriptFolders={scriptFolders}
+        onScript={openScript}
         onFolder={() => folder()}
         onRenameFolder={folder}
         onDeleteFolder={deleteFolder}
@@ -347,9 +451,9 @@ export function Workspace({
             <Database size={14} />
             <span>{session?.database ?? "Workspace"}</span>
             <span className="slash">/</span>
-            <strong>
+            <strong title={mode === "query" ? scriptTitle : undefined}>
               {mode === "query"
-                ? (savedQuery?.name ?? "Untitled query")
+                ? (script?.name ?? savedQuery?.name ?? "Untitled query")
                 : table
                   ? `${table.schema}.${table.name}`
                   : "Overview"}
@@ -399,6 +503,7 @@ export function Workspace({
               {table?.name ?? "Table"}
             </button>
             <button
+              title={scriptTitle}
               className={mode === "query" ? "tab active" : "tab"}
               disabled={!!busy}
               onClick={() => {
@@ -406,7 +511,7 @@ export function Workspace({
               }}
             >
               <Code2 size={14} />
-              {savedQuery?.name ?? "SQL query"}
+              {script?.name ?? savedQuery?.name ?? "SQL query"}
             </button>
           </div>
         )}
@@ -440,10 +545,18 @@ export function Workspace({
             <div className="query-toolbar">
               <div>
                 <Code2 size={15} />
-                <strong>{savedQuery?.name ?? "Untitled query"}</strong>
+                <strong title={scriptTitle}>
+                  {script?.name ?? savedQuery?.name ?? "Untitled query"}
+                </strong>
                 <span className="hint">T-SQL</span>
               </div>
               <div>
+                {script && (
+                  <button disabled={!!busy} onClick={() => void reloadScript()}>
+                    <RefreshCw size={14} />
+                    Reload from disk
+                  </button>
+                )}
                 <button
                   onClick={() => setSaveOpen(true)}
                   disabled={!sql.trim()}
@@ -466,6 +579,7 @@ export function Workspace({
               fallback={<div className="sql-editor hint">Loading editor…</div>}
             >
               <SqlEditor
+                key={editorGeneration}
                 value={sql}
                 onChange={setSql}
                 onSelection={setSelection}
@@ -500,6 +614,16 @@ export function Workspace({
                 </span>
               )}
               <div className="spacer" />
+              {queryResponse?.results.length ? (
+                <button
+                  disabled={!!busy}
+                  title="Copy every result set, with messages, as text"
+                  onClick={() => void copyAllResults(queryResponse)}
+                >
+                  <Copy size={14} />
+                  Copy all as text
+                </button>
+              ) : null}
               {data && (
                 <button disabled={!!busy} onClick={() => setExportOpen(true)}>
                   <Download size={14} />
@@ -609,7 +733,7 @@ export function Workspace({
                   : "Connect to a database to run your SQL."
                 : session
                   ? "Choose a table from the explorer, or open a query."
-                  : "Connect to a database, or import a folder of SQL scripts from the sidebar."}
+                  : "Connect to a database, or open SQL scripts from the sidebar."}
             </p>
             {!session && (
               <button className="primary" onClick={onConnect}>
@@ -717,6 +841,8 @@ export function Workspace({
               ],
             });
             setSavedId(id);
+            setScript(null);
+            setLoadedSql("");
             setSaveOpen(false);
             setNotice("Query saved on this PC.");
           }}

@@ -91,3 +91,29 @@ export function querySqlRows(columns: Column[], rows: Cell[][]): string {
       .join("\nUNION ALL\n") + ";"
   );
 }
+// Fences one backtick longer than any run in the content keep embedded backticks literal.
+function fenced(content: string, language: string) {
+  const longest = Math.max(
+    0,
+    ...(content.match(/`+/g) ?? []).map((run) => run.length),
+  );
+  const fence = "`".repeat(Math.max(3, longest + 1));
+  return `${fence}${language}\n${content}\n${fence}`;
+}
+export function resultsText(
+  results: { rowCount: number; csv: string }[],
+  recordsAffected: number,
+  messages: string[],
+): string {
+  return [
+    ...results.map(
+      ({ rowCount, csv }, index) =>
+        `Result ${index + 1} of ${results.length} · ${rowCount.toLocaleString("en-US")} ${rowCount === 1 ? "row" : "rows"}\n` +
+        fenced(csv.replace(/\r?\n$/, ""), "csv"),
+    ),
+    ...(messages.length
+      ? [`Messages\n${fenced(messages.join("\n"), "text")}`]
+      : []),
+    ...(recordsAffected >= 0 ? [`${recordsAffected} rows affected`] : []),
+  ].join("\n\n");
+}

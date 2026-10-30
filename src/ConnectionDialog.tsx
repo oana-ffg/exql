@@ -7,6 +7,7 @@ import {
   ShieldCheck,
   Trash2,
 } from "lucide-react";
+import { ContextMenu, useContextMenu } from "./ContextMenu";
 import { Modal } from "./Modal";
 import { request } from "./api";
 import type { Connection, ConnectionProfile } from "./types";
@@ -41,6 +42,10 @@ export function ConnectionDialog({
   const [form, setForm] = useState<Connection>(defaults);
   const [profiles, setProfiles] = useState<ConnectionProfile[]>([]);
   const [id, setId] = useState<string | null>(null);
+  const [cloneSource, setCloneSource] = useState<ConnectionProfile | null>(
+    null,
+  );
+  const context = useContextMenu<ConnectionProfile>();
   const [name, setName] = useState("");
   const [folder, setFolder] = useState("");
   const [color, setColor] = useState<string | null>(null);
@@ -71,6 +76,7 @@ export function ConnectionDialog({
   }
   function newConnection() {
     setId(null);
+    setCloneSource(null);
     setForm(defaults);
     setName("");
     setFolder("");
@@ -79,6 +85,45 @@ export function ConnectionDialog({
     setShowString(false);
     setRemember(true);
     setError("");
+  }
+  function selectProfile(profile: ConnectionProfile, clone = false) {
+    setId(clone ? null : profile.id);
+    setCloneSource(clone ? profile : null);
+    setForm({
+      ...profile.connection,
+      username: profile.connection.username ?? "",
+      password: "",
+      connectionString: "",
+    });
+    setName(clone ? profile.name + " (copy)" : profile.name);
+    setFolder(profile.folder);
+    setColor(clone ? null : (profile.color ?? null));
+    setKeepPassword(
+      profile.connection.authentication === "sql" ||
+        profile.connection.authentication === "connectionString",
+    );
+    setShowString(false);
+    setRemember(true);
+    setError("");
+  }
+  async function deleteProfile(profile: ConnectionProfile) {
+    if (
+      !window.confirm("Delete " + profile.name + " and its saved credential?")
+    )
+      return;
+    setPending(true);
+    setError("");
+    try {
+      await request("/profiles/" + profile.id, undefined, undefined, "DELETE");
+      setProfiles((current) =>
+        current.filter((item) => item.id !== profile.id),
+      );
+      if (id === profile.id || cloneSource?.id === profile.id) newConnection();
+    } catch (error) {
+      setError((error as Error).message);
+    } finally {
+      setPending(false);
+    }
   }
   async function connectSaved(profile: ConnectionProfile) {
     setError("");
@@ -95,6 +140,7 @@ export function ConnectionDialog({
       folder,
       connection: form,
       keepPassword,
+      credentialSourceId: cloneSource?.id,
       color: selectedColor,
     });
     setProfiles((current) => [
@@ -102,6 +148,7 @@ export function ConnectionDialog({
       profile,
     ]);
     setId(profile.id);
+    setCloneSource(null);
     setColor(profile.color);
     onProfileSaved(profile);
     setKeepPassword(form.authentication === "sql" || stringMode);
@@ -131,31 +178,14 @@ export function ConnectionDialog({
                     className={`profile-row ${id === profile.id ? "active" : ""}`}
                     style={connectionColorStyle(profile.color)}
                     key={profile.id}
+                    tabIndex={0}
+                    {...context.bind(profile)}
                   >
                     <button
                       type="button"
                       disabled={disabled}
                       className="profile-select"
-                      onClick={() => {
-                        setId(profile.id);
-                        setForm({
-                          ...profile.connection,
-                          username: profile.connection.username ?? "",
-                          password: "",
-                          connectionString: "",
-                        });
-                        setName(profile.name);
-                        setFolder(profile.folder);
-                        setColor(profile.color ?? null);
-                        setKeepPassword(
-                          profile.connection.authentication === "sql" ||
-                            profile.connection.authentication ===
-                              "connectionString",
-                        );
-                        setShowString(false);
-                        setRemember(true);
-                        setError("");
-                      }}
+                      onClick={() => selectProfile(profile)}
                     >
                       <Database size={14} />
                       <span>
@@ -180,32 +210,7 @@ export function ConnectionDialog({
                       disabled={disabled}
                       aria-label={`Delete connection ${profile.name}`}
                       className="icon-button"
-                      onClick={async () => {
-                        if (
-                          !window.confirm(
-                            `Delete ${profile.name} and its saved credential?`,
-                          )
-                        )
-                          return;
-                        setPending(true);
-                        setError("");
-                        try {
-                          await request(
-                            `/profiles/${profile.id}`,
-                            undefined,
-                            undefined,
-                            "DELETE",
-                          );
-                          setProfiles(
-                            profiles.filter((item) => item.id !== profile.id),
-                          );
-                          if (id === profile.id) newConnection();
-                        } catch (error) {
-                          setError((error as Error).message);
-                        } finally {
-                          setPending(false);
-                        }
-                      }}
+                      onClick={() => void deleteProfile(profile)}
                     >
                       <Trash2 size={13} />
                     </button>
@@ -223,6 +228,36 @@ export function ConnectionDialog({
           New connection
         </button>
       </div>
+      {context.menu && (
+        <ContextMenu
+          position={context.menu}
+          label={context.menu.target.name}
+          onClose={context.close}
+          actions={[
+            {
+              label: "Connect",
+              disabled,
+              run: () => void connectSaved(context.menu!.target),
+            },
+            {
+              label: "Edit",
+              disabled,
+              run: () => selectProfile(context.menu!.target),
+            },
+            {
+              label: "Clone…",
+              disabled,
+              run: () => selectProfile(context.menu!.target, true),
+            },
+            {
+              label: "Delete…",
+              separator: true,
+              disabled,
+              run: () => void deleteProfile(context.menu!.target),
+            },
+          ]}
+        />
+      )}
       <form
         onSubmit={async (event) => {
           event.preventDefault();
@@ -240,7 +275,13 @@ export function ConnectionDialog({
         <div className="connection-type">
           <Database size={24} />
           <div>
-            <strong>{id ? name : "New SQL Server connection"}</strong>
+            <strong>
+              {cloneSource
+                ? `Clone of ${cloneSource.name}`
+                : id
+                  ? name
+                  : "New SQL Server connection"}
+            </strong>
             <span>SQL Server & Azure SQL Database</span>
           </div>
         </div>
@@ -327,14 +368,16 @@ export function ConnectionDialog({
           </label>
           {stringMode ? (
             <>
-              {id && remember && (
+              {(id || cloneSource) && remember && (
                 <label className="check-label">
                   <input
                     type="checkbox"
                     checked={keepPassword}
                     onChange={(event) => setKeepPassword(event.target.checked)}
                   />
-                  Keep the saved connection string
+                  {cloneSource
+                    ? `Keep the connection string from ${cloneSource.name}`
+                    : "Keep the saved connection string"}
                 </label>
               )}
               {!keepPassword && (
@@ -418,14 +461,16 @@ export function ConnectionDialog({
               )}
               {form.authentication === "sql" && (
                 <>
-                  {id && (
+                  {(id || cloneSource) && remember && (
                     <label className="check-label">
                       <input
                         type="checkbox"
                         checked={keepPassword}
                         onChange={(e) => setKeepPassword(e.target.checked)}
                       />
-                      Keep the saved password
+                      {cloneSource
+                        ? `Keep the password from ${cloneSource.name}`
+                        : "Keep the saved password"}
                     </label>
                   )}
                   {!keepPassword && (
