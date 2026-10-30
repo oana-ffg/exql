@@ -77,7 +77,9 @@ export async function launchDesktop(root, port, extra = []) {
   child.stdout.pipe(log, { end: false });
   child.stderr.pipe(log, { end: false });
   child.on("error", (error) => log.write(`${error.stack}\n`));
-  child.on("exit", (code) => {
+  // The portable launcher exits before its child app. Keep logging until all
+  // inherited stdout/stderr handles close, including the real application.
+  child.on("close", (code) => {
     log.end(`Launcher exited: ${code}\n`);
   });
   return attachDesktop(port);

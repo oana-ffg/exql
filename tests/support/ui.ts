@@ -30,6 +30,10 @@ export async function connect(page: Page, database = databaseName) {
   await page.getByLabel("Save this connection").uncheck();
   await fillConnection(page, database);
   await page.getByRole("button", { name: "Connect", exact: true }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.getByRole("tab", { selected: true })).toContainText(
+    database,
+  );
   await expect(
     page.getByRole("tabpanel").getByText("Connected", { exact: true }),
   ).toBeVisible();

@@ -1,5 +1,5 @@
 import { databaseName, DisposableDatabase } from "../support/database";
-import { fillConnection } from "../support/ui";
+import { connect } from "../support/ui";
 import { test, expect } from "../support/fixtures";
 import type { Page } from "@playwright/test";
 
@@ -16,20 +16,6 @@ async function isolatedWorkspace(page: Page) {
     return route.fulfill({ status: 204 });
   });
   return documents;
-}
-async function connect(page: Page, database: string) {
-  await page
-    .getByRole("button", { name: "Add connection", exact: true })
-    .click();
-  await page.getByLabel("Save this connection").uncheck();
-  await page
-    .getByRole("textbox", { name: "Database", exact: true })
-    .fill(database);
-  await fillConnection(page, database);
-  await page.getByRole("button", { name: "Connect", exact: true }).click();
-  await expect(
-    page.getByRole("tabpanel").getByText("Connected", { exact: true }),
-  ).toBeVisible();
 }
 
 test("independent database workspaces preserve edits, run concurrently, and restore drafts", async ({
