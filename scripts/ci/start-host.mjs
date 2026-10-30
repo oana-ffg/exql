@@ -23,7 +23,7 @@ child.on("error", (error) => {
   console.error(error);
   process.exitCode = 1;
 });
-child.on("exit", (code) => {
+child.on("close", (code) => {
   log.end();
   process.exitCode = code ?? 1;
 });
