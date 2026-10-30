@@ -93,10 +93,9 @@ export function querySqlRows(columns: Column[], rows: Cell[][]): string {
 }
 // Fences one backtick longer than any run in the content keep embedded backticks literal.
 function fenced(content: string, language: string) {
-  const longest = Math.max(
-    0,
-    ...(content.match(/`+/g) ?? []).map((run) => run.length),
-  );
+  let longest = 0;
+  for (const [run] of content.matchAll(/`+/g))
+    longest = Math.max(longest, run.length);
   const fence = "`".repeat(Math.max(3, longest + 1));
   return `${fence}${language}\n${content}\n${fence}`;
 }

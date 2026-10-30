@@ -129,6 +129,28 @@ test("linked scripts read current disk content, protect edits, run and unlink wi
       .getByRole("button", { name: "Reload from disk", exact: true })
       .click();
     await expect(editor).toHaveText("SELECT 4 AS editor_draft;");
+
+    // The confirmation does not cover edits typed while the reload is in flight.
+    const scriptRead = /\/api\/script-folders\/[^/]+\/script\?/;
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    await page.route(scriptRead, async (route) => {
+      await held;
+      await route.continue();
+    });
+    page.once("dialog", (dialog) => dialog.accept());
+    await panel
+      .getByRole("button", { name: "Reload from disk", exact: true })
+      .click();
+    await editor.fill("SELECT 7 AS typed_while_loading;");
+    release();
+    await expect(panel.getByRole("alert")).toContainText(
+      "The editor changed while inner.sql was reloading",
+    );
+    await expect(editor).toHaveText("SELECT 7 AS typed_while_loading;");
+    await page.unroute(scriptRead);
+    await panel.getByRole("button", { name: "Dismiss error" }).click();
+
     page.once("dialog", (dialog) => dialog.accept());
     await panel
       .getByRole("button", { name: "Reload from disk", exact: true })

@@ -9,7 +9,7 @@ public sealed record ScriptFolder(string Id, string Path)
 }
 public sealed record AddScriptFolderRequest(string Path);
 public sealed record ScriptFile(string Path, long Size, DateTime Modified);
-public sealed record ScriptListing(List<ScriptFile> Scripts, bool Truncated);
+public sealed record ScriptListing(List<ScriptFile> Scripts, bool Truncated, List<string> Unreadable);
 public sealed record ScriptContent(string Sql, DateTime Modified);
 
 public sealed class ScriptFolders(AppPaths paths)
@@ -88,20 +88,41 @@ public sealed class ScriptFolders(AppPaths paths)
         var root = Root(id);
         return Access(root, () =>
         {
-            var files = Directory.EnumerateFiles(root, "*.sql", new EnumerationOptions
+            var options = new EnumerationOptions
             {
-                RecurseSubdirectories = true,
-                IgnoreInaccessible = true,
+                IgnoreInaccessible = false,
                 MatchCasing = MatchCasing.CaseInsensitive,
                 AttributesToSkip = FileAttributes.Hidden | FileAttributes.System | FileAttributes.ReparsePoint,
-            }).Order(StringComparer.OrdinalIgnoreCase).Take(MaxFiles + 1).ToList();
+            };
+            List<string> files = [];
+            List<string> unreadable = [];
+            Stack<string> pending = new([root]);
+            while (pending.TryPop(out var directory))
+            {
+                try
+                {
+                    var scripts = Directory.EnumerateFiles(directory, "*.sql", options).ToList();
+                    var children = Directory.EnumerateDirectories(directory, "*", options).ToList();
+                    files.AddRange(scripts);
+                    children.ForEach(pending.Push);
+                }
+                // Keep readable scripts listed, but report each subfolder that could not be searched.
+                catch (Exception error) when (directory != root && error is UnauthorizedAccessException or IOException)
+                {
+                    unreadable.Add(Relative(root, directory));
+                }
+            }
+            files.Sort(StringComparer.OrdinalIgnoreCase);
+            unreadable.Sort(StringComparer.OrdinalIgnoreCase);
             return new ScriptListing(files.Take(MaxFiles).Select(file =>
             {
                 var info = new FileInfo(file);
-                return new ScriptFile(Path.GetRelativePath(root, file).Replace('\\', '/'), info.Length, info.LastWriteTimeUtc);
-            }).ToList(), files.Count > MaxFiles);
+                return new ScriptFile(Relative(root, file), info.Length, info.LastWriteTimeUtc);
+            }).ToList(), files.Count > MaxFiles, unreadable);
         });
     }
+
+    private static string Relative(string root, string path) => Path.GetRelativePath(root, path).Replace('\\', '/');
 
     public ScriptContent Read(string id, string relative)
     {

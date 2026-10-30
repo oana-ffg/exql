@@ -14,6 +14,7 @@ export interface ScriptFolder {
 interface Listing {
   scripts: ScriptFile[];
   truncated: boolean;
+  unreadable: string[];
   error?: string;
 }
 export interface OpenScript {
@@ -67,6 +68,7 @@ export function useScriptFolders(onError: (message: string) => void) {
               {
                 scripts: [],
                 truncated: false,
+                unreadable: [],
                 error: (error as Error).message,
               },
             ] as const;
