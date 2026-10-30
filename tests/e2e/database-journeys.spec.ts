@@ -380,9 +380,14 @@ test("copied table INSERTs and query SELECTs execute independently and reproduce
   );
   const actual = await tableRows(databaseName, "TypeSamplesCopy");
   expect(actual).toEqual(expected);
+  await execute(
+    databaseName,
+    "SELECT Id,LargeInteger,ExactDecimal,EventTime,Payload,NullableText,EmptyText,CAST(CASE WHEN Id=1 THEN 1 ELSE 0 END AS bit) AS BitFlag INTO dbo.QueryCopySource FROM dbo.TypeSamples;",
+  );
+  const expectedQuery = await tableRows(databaseName, "QueryCopySource");
   const response = await runSql(
     page,
-    "SELECT LargeInteger,ExactDecimal,EventTime,Payload,NullableText,EmptyText FROM dbo.TypeSamples ORDER BY Id;",
+    "SELECT * FROM dbo.QueryCopySource ORDER BY Id;",
   );
   expect(response.ok()).toBe(true);
   await page.getByLabel("Select all rows on page").check();
@@ -393,25 +398,8 @@ test("copied table INSERTs and query SELECTs execute independently and reproduce
     databaseName,
     `SELECT * INTO dbo.CopiedQuery FROM (${select.replace(/;\s*$/, "")}) AS copied;`,
   );
-  const copied = await tableRows(databaseName, "CopiedQuery", "");
-  const sort = (records: Record<string, string | null>[]) =>
-    records.sort((a, b) => a.LargeInteger!.localeCompare(b.LargeInteger!));
-  expect(sort(copied)).toEqual(
-    sort(
-      expected.map((row) =>
-        Object.fromEntries(
-          [
-            "LargeInteger",
-            "ExactDecimal",
-            "EventTime",
-            "Payload",
-            "NullableText",
-            "EmptyText",
-          ].map((key) => [key, row[key]]),
-        ),
-      ),
-    ),
-  );
+  const copied = await tableRows(databaseName, "CopiedQuery");
+  expect(copied).toEqual(expectedQuery);
 });
 
 test("script folder Play executes the latest disk contents in the current database", async ({

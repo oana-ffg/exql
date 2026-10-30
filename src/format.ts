@@ -82,10 +82,12 @@ export function querySqlRows(columns: Column[], rows: Cell[][]): string {
         (row) =>
           "SELECT " +
           columns
-            .map(
-              (column, i) =>
-                `${sqlValue(column, row[i])} AS ${quoteIdentifier(column.name)}`,
-            )
+            .map((column, i) => {
+              const value = sqlValue(column, row[i]);
+              const expression =
+                column.type === "bit" ? `CAST(${value} AS bit)` : value;
+              return `${expression} AS ${quoteIdentifier(column.name)}`;
+            })
             .join(", "),
       )
       .join("\nUNION ALL\n") + ";"
