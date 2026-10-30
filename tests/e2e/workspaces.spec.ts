@@ -72,7 +72,7 @@ test("independent database workspaces preserve edits, run concurrently, and rest
     ).toBeVisible();
     await page.screenshot({ path: "artifacts/multiple-databases.png" });
 
-    await page.getByRole("tab", { name: databaseName, exact: true }).click();
+    await page.getByRole("tab", { name: new RegExp(databaseName) }).click();
     await expect(panel.getByLabel("Filter 1 value")).toHaveValue("kept draft");
     await expect(panel.locator('[data-cell="0:6"]')).toHaveText(
       "staged only, never committed",
@@ -97,9 +97,9 @@ test("independent database workspaces preserve edits, run concurrently, and rest
       panel.getByRole("gridcell", { name: other.name, exact: true }),
     ).toBeVisible();
     await expect.poll(() => page.evaluate(() => window.exqlDirty)).toBe(false);
-    await page.getByRole("tab", { name: databaseName, exact: true }).click();
+    await page.getByRole("tab", { name: new RegExp(databaseName) }).click();
     await expect(
-      panel.getByRole("gridcell", { name: databaseName, exact: true }),
+      panel.getByRole("gridcell", { name: new RegExp(databaseName) }),
     ).toBeVisible();
     await page.getByRole("tab", { name: other.name, exact: true }).click();
     await panel
@@ -107,10 +107,10 @@ test("independent database workspaces preserve edits, run concurrently, and rest
       .click();
     await expect(panel.getByText("Offline", { exact: true })).toBeVisible();
     expect(deleted).toHaveLength(1);
-    await page.getByRole("tab", { name: databaseName, exact: true }).click();
+    await page.getByRole("tab", { name: new RegExp(databaseName) }).click();
     await expect(panel.getByText("Connected", { exact: true })).toBeVisible();
     await expect(
-      panel.getByRole("gridcell", { name: databaseName, exact: true }),
+      panel.getByRole("gridcell", { name: new RegExp(databaseName) }),
     ).toBeVisible();
 
     await page.route("**/api/connect", (route) =>
@@ -143,10 +143,20 @@ test("independent database workspaces preserve edits, run concurrently, and rest
     await page.getByRole("tab", { name: other.name, exact: true }).click();
     await expect(editor).toHaveText("SELECT DB_NAME() AS DatabaseName;");
     page.once("dialog", (dialog) => dialog.dismiss());
-    await page.getByRole("button", { name: /Close workspace master/ }).click();
+    await page
+      .getByRole("button", {
+        name: `Close workspace ${other.name}`,
+        exact: true,
+      })
+      .click();
     await expect(page.getByRole("tab")).toHaveCount(2);
     page.once("dialog", (dialog) => dialog.accept());
-    await page.getByRole("button", { name: /Close workspace master/ }).click();
+    await page
+      .getByRole("button", {
+        name: `Close workspace ${other.name}`,
+        exact: true,
+      })
+      .click();
     await expect(page.getByRole("tab")).toHaveCount(1);
     page.once("dialog", (dialog) => dialog.accept());
     await page

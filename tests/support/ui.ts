@@ -36,6 +36,11 @@ export async function connect(page: Page, database = databaseName) {
 }
 
 export async function openTable(page: Page, table = "WorkItems") {
+  const loaded = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/table") &&
+      response.request().postDataJSON()?.table === table,
+  );
   await page
     .getByRole("complementary")
     .getByRole("button", {
@@ -43,7 +48,14 @@ export async function openTable(page: Page, table = "WorkItems") {
       exact: true,
     })
     .click();
-  await expect(page.locator("tbody tr").first()).toBeVisible();
+  const response = await loaded;
+  expect(response.ok(), await response.text()).toBe(true);
+  await expect(
+    page.getByRole("heading", { name: table, exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("tabpanel").locator("tbody tr").first(),
+  ).toBeVisible();
 }
 
 export async function editCell(

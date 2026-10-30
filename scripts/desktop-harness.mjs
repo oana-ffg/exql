@@ -37,11 +37,23 @@ export async function attachDesktop(port, version) {
     )
     .toBe(true);
   const browser = await chromium.connectOverCDP(endpoint);
-  const context = browser.contexts()[0];
-  const page = context
-    .pages()
-    .find((page) => page.url().startsWith("http://127.0.0.1:"));
-  if (!page) throw new Error("Desktop CDP has no ExQL page.");
+  let page;
+  await expect
+    .poll(
+      () => {
+        page = browser
+          .contexts()
+          .flatMap((context) => context.pages())
+          .find((page) => page.url().startsWith("http://127.0.0.1:"));
+        return !!page;
+      },
+      {
+        timeout: 30_000,
+        message: "Wait for the native WebView to navigate to ExQL",
+      },
+    )
+    .toBe(true);
+  const context = page.context();
   await page.waitForFunction(() => window.exqlWorkspaceReady);
   if (version)
     await expect(page.locator(".update-version")).toHaveText(`ExQL ${version}`);

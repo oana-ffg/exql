@@ -1,3 +1,5 @@
+import { editedTypeValues } from "../support/type-values";
+import { csvForRows, exactJson, normalizeCsv } from "../support/exports";
 import {
   connection,
   databaseName,
@@ -326,21 +328,7 @@ test("every editable fixture type commits exact values to SQL Server", async () 
   const original = Object.fromEntries(
     before.columns.map((column, i) => [column.name, before.rows[0][i]]),
   );
-  const values = {
-    Id: "2",
-    LargeInteger: "-9223372036854775808",
-    ExactDecimal: "98765432109876543210.987654321098765432",
-    EventTime: "2027-01-02T03:04:05.7654321-04:30",
-    Payload: "0xABCDEF0001",
-    NullableText: "日本語 æøå ' \"\nline",
-    EmptyText: "",
-    LegacyDateTime: "2027-01-02T03:04:05.123",
-    LegacyMinuteTime: "2027-01-02T03:04:00.000",
-    CalendarDate: "2027-01-02",
-    ClockTime: "23:59:58.7654321",
-    Identifier: "fedcba98-7654-3210-fedc-ba9876543210",
-    Amount: "-98765.4321",
-  };
+  const values = editedTypeValues;
   const response = await api.post(url("/edit"), {
     data: {
       schema: "dbo",
@@ -429,4 +417,116 @@ test("SQL batches commit INSERT, UPDATE, DELETE and preserve earlier commits aft
     { Id: 1, Message: "updated" },
     { Id: 3, Message: "before error" },
   ]);
+});
+
+test("filtered table exports and query snapshots match independent SQL across pages", async () => {
+  test.setTimeout(120_000);
+  const request: TableRequest = {
+    ...tableRequest(),
+    sort: "Id",
+    descending: true,
+    filters: [{ column: "Priority", operator: ">=", value: "3" }],
+  };
+  const expected = await tableRows(
+    databaseName,
+    "WorkItems",
+    "WHERE Priority>=3 ORDER BY Id DESC",
+  );
+  expect((await page(request)).rows).toEqual(
+    expected.slice(0, 200).map(Object.values),
+  );
+  expect((await page({ ...request, offset: 200 })).rows).toEqual(
+    expected.slice(200).map(Object.values),
+  );
+  const typed = (records: Record<string, string | null>[], numeric: string[]) =>
+    records.map((row) =>
+      Object.fromEntries(
+        Object.entries(row).map(([key, value]) => [
+          key,
+          value === null
+            ? null
+            : numeric.includes(key)
+              ? { number: value }
+              : key === "Active"
+                ? value === "true"
+                : value,
+        ]),
+      ),
+    );
+  for (const format of ["csv", "json"]) {
+    const response = await api.post(url("/export"), {
+      data: { table: request, format },
+    });
+    expect(response.ok(), await response.text()).toBe(true);
+    const text = await response.text();
+    if (format === "csv") expect(normalizeCsv(text)).toBe(csvForRows(expected));
+    else
+      expect(exactJson(text)).toEqual(
+        typed(expected, ["Id", "Priority", "Estimate"]),
+      );
+  }
+  const exact = await tableRows(databaseName, "TypeSamples");
+  const exported = await api.post(url("/export"), {
+    data: { table: tableRequest("TypeSamples"), format: "json" },
+  });
+  expect(exactJson(await exported.text())).toEqual(
+    typed(exact, ["Id", "LargeInteger", "ExactDecimal", "Derived", "Amount"]),
+  );
+  const response = await query(
+    "UPDATE dbo.WorkItems SET Priority=Priority+1 WHERE Id=1; SELECT * FROM dbo.WorkItems ORDER BY Id;",
+  );
+  const snapshot = await tableRows(databaseName, "WorkItems");
+  await execute(
+    databaseName,
+    "UPDATE dbo.WorkItems SET Notes=N'after snapshot' WHERE Id=1;",
+  );
+  for (const format of ["csv", "json"]) {
+    const output = await api.post(url("/export"), {
+      data: { resultId: response.results[0].id, format },
+    });
+    const text = await output.text();
+    expect(output.ok(), text).toBe(true);
+    if (format === "csv") expect(normalizeCsv(text)).toBe(csvForRows(snapshot));
+    else
+      expect(exactJson(text)).toEqual(
+        typed(snapshot, ["Id", "Priority", "Estimate"]),
+      );
+  }
+  expect(
+    await rows(databaseName, "SELECT Priority FROM dbo.WorkItems WHERE Id=1"),
+  ).toEqual([{ Priority: 2 }]);
+});
+
+test("aborting a query preserves earlier commits and closes its SQL connection", async () => {
+  const abort = new AbortController();
+  const running = fetch(`http://127.0.0.1:5274${url("/query")}`, {
+    method: "POST",
+    headers: { ...headers, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      sql: "INSERT dbo.CommandLog VALUES(1,N'before cancel'); WAITFOR DELAY '00:01:00'; INSERT dbo.CommandLog VALUES(2,N'after cancel');",
+    }),
+    signal: abort.signal,
+  }).then(
+    () => {
+      throw new Error("Long query completed before cancellation.");
+    },
+    (error: Error) => error,
+  );
+  try {
+    await expect
+      .poll(() => rows(databaseName, "SELECT * FROM dbo.CommandLog"))
+      .toEqual([{ Id: 1, Message: "before cancel" }]);
+    const sessions =
+      "SELECT session_id FROM sys.dm_exec_sessions WHERE database_id=DB_ID() AND program_name=N'ExQL' AND session_id<>@@SPID";
+    expect((await rows(databaseName, sessions)).length).toBe(1);
+    abort.abort();
+    expect((await running).name).toBe("AbortError");
+    await expect.poll(() => rows(databaseName, sessions)).toEqual([]);
+    expect(await rows(databaseName, "SELECT * FROM dbo.CommandLog")).toEqual([
+      { Id: 1, Message: "before cancel" },
+    ]);
+  } finally {
+    abort.abort();
+    await running;
+  }
 });

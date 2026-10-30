@@ -97,7 +97,7 @@ export async function rows<T = Record<string, unknown>>(
 ): Promise<T[]> {
   const json = await execute(
     database,
-    `${select} FOR JSON PATH, INCLUDE_NULL_VALUES;`,
+    `SELECT COALESCE(NULLIF((${select} FOR JSON PATH, INCLUDE_NULL_VALUES), N''), N'[]') AS Json;`,
   );
   return JSON.parse(json.trim().split(/\r?\n/).join(""));
 }

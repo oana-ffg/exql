@@ -55,6 +55,9 @@ IF COL_LENGTH(N'dbo.TypeSamples', N'Identifier') IS NULL
 IF COL_LENGTH(N'dbo.TypeSamples', N'Amount') IS NULL
     ALTER TABLE dbo.TypeSamples ADD Amount money NOT NULL
         CONSTRAINT DF_TypeSamples_Amount DEFAULT 12.3456;
+IF COL_LENGTH(N'dbo.TypeSamples', N'PreciseDateTime') IS NULL
+    ALTER TABLE dbo.TypeSamples ADD PreciseDateTime datetime2(7) NOT NULL
+        CONSTRAINT DF_TypeSamples_PreciseDateTime DEFAULT '2026-09-08T12:34:56.1234567';
 IF OBJECT_ID(N'dbo.NoPrimaryKey', N'U') IS NULL
 BEGIN
     CREATE TABLE dbo.NoPrimaryKey (Value nvarchar(100) NULL);

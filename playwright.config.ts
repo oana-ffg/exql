@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 process.env.EXQL_TEST_DATABASE ??= `ExqlTest_${randomUUID().replaceAll("-", "")}`;
-process.env.EXQL_TEST_DATA_DIRECTORY ??= mkdtempSync(
+process.env.EXQL_TEST_DATA_DIRECTORY = mkdtempSync(
   join(tmpdir(), "exql-host-"),
 );
 mkdirSync("artifacts", { recursive: true });
@@ -15,6 +15,8 @@ export default defineConfig({
   workers: 1,
   retries: 0,
   forbidOnly: !!process.env.CI,
+  globalTeardown: "./tests/support/cleanup.ts",
+  metadata: { dataDirectory: process.env.EXQL_TEST_DATA_DIRECTORY },
   timeout: 60_000,
   reporter: [["list"], ["html", { open: "never" }]],
   use: {

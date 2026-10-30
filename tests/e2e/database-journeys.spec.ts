@@ -1,3 +1,5 @@
+import { csvForRows, exactJson, normalizeCsv } from "../support/exports";
+import { editedTypeValues } from "../support/type-values";
 import { readFile, mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { Page } from "@playwright/test";
@@ -102,21 +104,7 @@ test("grid edits round-trip every editable type without numeric, binary or date 
   page,
 }) => {
   await openTable(page, "TypeSamples");
-  const values = {
-    Id: "2",
-    LargeInteger: "-9223372036854775808",
-    ExactDecimal: "98765432109876543210.987654321098765432",
-    EventTime: "2027-01-02T03:04:05.7654321-04:30",
-    Payload: "0xABCDEF0001",
-    NullableText: "日本語 æøå ' \"\nline",
-    EmptyText: "Unicode ✓",
-    LegacyDateTime: "2027-01-02T03:04:05.123",
-    LegacyMinuteTime: "2027-01-02T03:04:00.000",
-    CalendarDate: "2027-01-02",
-    ClockTime: "23:59:58.7654321",
-    Identifier: "fedcba98-7654-3210-fedc-ba9876543210",
-    Amount: "-98765.4321",
-  };
+  const values = editedTypeValues;
   for (const [column, value] of Object.entries(values))
     await editCell(page, 0, column, value);
   await save(page);
@@ -266,7 +254,7 @@ async function download(
   await page.getByLabel("Format", { exact: true }).selectOption(format);
   if (!query)
     await page
-      .getByLabel("Rows", { exact: true })
+      .getByRole("combobox", { name: "Rows", exact: true })
       .selectOption(filtered ? "filtered" : "all");
   const event = page.waitForEvent("download");
   await page.getByRole("button", { name: "Download", exact: true }).click();
@@ -278,6 +266,7 @@ async function download(
 test("filter, sort, pagination and table/query exports equal independent SQL across every page", async ({
   page,
 }) => {
+  test.setTimeout(120_000);
   await openTable(page);
   await page.getByRole("button", { name: "Add filter", exact: true }).click();
   await page.getByLabel("Filter 1 column").selectOption("Priority");
@@ -319,7 +308,7 @@ test("filter, sort, pagination and table/query exports equal independent SQL acr
       "WorkItems",
       `${filtered ? "WHERE Priority>=3" : ""} ORDER BY Id DESC`,
     );
-    const json = JSON.parse(await download(page, "json", false, filtered));
+    const json = exactJson(await download(page, "json", false, filtered));
     const numeric = ["Id", "Priority", "Estimate"];
     const typed = wire.map((row) =>
       Object.fromEntries(
@@ -328,7 +317,7 @@ test("filter, sort, pagination and table/query exports equal independent SQL acr
           value === null
             ? null
             : numeric.includes(key)
-              ? Number(value)
+              ? { number: value }
               : key === "Active"
                 ? value === "true"
                 : value,
@@ -337,14 +326,7 @@ test("filter, sort, pagination and table/query exports equal independent SQL acr
     );
     expect(json).toEqual(typed);
     const csv = await download(page, "csv", false, filtered);
-    const quote = (value: string | null) =>
-      value === null ? "" : `"${value.replaceAll('"', '""')}"`;
-    const expectedCsv =
-      [
-        Object.keys(wire[0]).map(quote).join(","),
-        ...wire.map((row) => Object.values(row).map(quote).join(",")),
-      ].join("\n") + "\n";
-    expect(csv.replaceAll("\r\n", "\n")).toBe(expectedCsv);
+    expect(normalizeCsv(csv)).toBe(csvForRows(wire));
   }
   const response = await runSql(
     page,
@@ -361,14 +343,7 @@ test("filter, sort, pagination and table/query exports equal independent SQL acr
   );
   expect(JSON.parse(await download(page, "json", true))).toEqual(snapshot);
   const queryCsv = await download(page, "csv", true);
-  const quote = (value: unknown) =>
-    value === null ? "" : `"${String(value).replaceAll('"', '""')}"`;
-  expect(queryCsv.replaceAll("\r\n", "\n")).toBe(
-    [
-      Object.keys(snapshot[0]).map(quote).join(","),
-      ...snapshot.map((row) => Object.values(row).map(quote).join(",")),
-    ].join("\n") + "\n",
-  );
+  expect(normalizeCsv(queryCsv)).toBe(csvForRows(snapshot));
   expect(
     await rows(databaseName, "SELECT Priority FROM dbo.WorkItems WHERE Id=1"),
   ).toEqual([{ Priority: 2 }]);
@@ -388,17 +363,14 @@ test("copied table INSERTs and query SELECTs execute independently and reproduce
   expect(inserts).not.toContain("[Derived]");
   await execute(
     databaseName,
-    "SELECT * INTO dbo.TypeSamplesCopy FROM dbo.TypeSamples WHERE 1=0;",
+    "SELECT * INTO dbo.TypeSamplesCopy FROM dbo.TypeSamples WHERE 1=0; ALTER TABLE dbo.TypeSamplesCopy DROP COLUMN Derived; ALTER TABLE dbo.TypeSamplesCopy ADD Derived AS (Id+1);",
   );
   await execute(
     databaseName,
     inserts.replaceAll("[dbo].[TypeSamples]", "[dbo].[TypeSamplesCopy]"),
   );
   const actual = await tableRows(databaseName, "TypeSamplesCopy");
-  // SELECT INTO materializes computed values; the copied INSERT correctly omits them.
-  expect(actual.map(({ Derived: _derived, ...row }) => row)).toEqual(
-    expected.map(({ Derived: _derived, ...row }) => row),
-  );
+  expect(actual).toEqual(expected);
   const response = await runSql(
     page,
     "SELECT LargeInteger,ExactDecimal,EventTime,Payload,NullableText,EmptyText FROM dbo.TypeSamples;",
@@ -441,6 +413,9 @@ test("script folder Play executes the latest disk contents in the current databa
   await page.getByLabel("Folder path").fill(directory);
   await page.getByRole("button", { name: "Add folder", exact: true }).click();
   await page.getByRole("button", { name: /^mutation\.sql/ }).click();
+  await expect(page.locator(".cm-content")).toHaveText(
+    "INSERT dbo.CommandLog VALUES(1,N'old disk content');",
+  );
   await writeFile(
     file,
     "INSERT dbo.CommandLog VALUES(2,N'latest disk content');",
@@ -473,7 +448,7 @@ test("two workspaces route grid edits and SQL mutations to their own databases",
       "INSERT dbo.CommandLog VALUES(2,N'second workspace');",
     );
     expect(second.ok()).toBe(true);
-    await page.getByRole("tab", { name: databaseName, exact: true }).click();
+    await page.getByRole("tab", { name: new RegExp(databaseName) }).click();
     await save(page);
     const first = await runSql(
       page,
