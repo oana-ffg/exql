@@ -1,3 +1,5 @@
+using System.Security.AccessControl;
+using System.Security.Principal;
 using System.Text;
 using Exql;
 using Xunit;
@@ -63,6 +65,7 @@ public sealed class ScriptFoldersTests : IDisposable
         Assert.Equal(["Nested/inner.sql", "top.SQL"], listing.Scripts.Select(file => file.Path));
         Assert.All(listing.Scripts, file => { Assert.True(file.Size > 0); Assert.Equal(DateTimeKind.Utc, file.Modified.Kind); });
         Assert.False(listing.Truncated);
+        Assert.Empty(listing.Unreadable);
         Directory.Delete(Path.Combine(scripts, "Nested"), true);
         File.Delete(hidden);
         File.Delete(Path.Combine(scripts, "top.SQL"));
@@ -106,5 +109,29 @@ public sealed class ScriptFoldersTests : IDisposable
         Assert.Equal(2000, listing.Scripts.Count);
         Assert.Equal("0000.sql", listing.Scripts[0].Path);
         Assert.Equal("1999.sql", listing.Scripts[^1].Path);
+    }
+
+    [Fact]
+    public void ReportsUnreadableSubfoldersAndKeepsReadableScripts()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        File.WriteAllText(Path.Combine(scripts, "open.sql"), "SELECT 1;");
+        var locked = Directory.CreateDirectory(Path.Combine(scripts, "Locked"));
+        File.WriteAllText(Path.Combine(locked.FullName, "denied.sql"), "SELECT 2;");
+        var deny = new FileSystemAccessRule(WindowsIdentity.GetCurrent().User!, FileSystemRights.ListDirectory, AccessControlType.Deny);
+        var security = locked.GetAccessControl();
+        security.AddAccessRule(deny);
+        locked.SetAccessControl(security);
+        try
+        {
+            var listing = store.Scripts(store.Add(scripts).Id);
+            Assert.Equal(["open.sql"], listing.Scripts.Select(file => file.Path));
+            Assert.Equal(["Locked"], listing.Unreadable);
+        }
+        finally
+        {
+            security.RemoveAccessRule(deny);
+            locked.SetAccessControl(security);
+        }
     }
 }

@@ -101,3 +101,9 @@ describe("copy all results as text", () => {
     );
   });
 });
+test("handles results with very many separate backtick runs", () => {
+  const csv = '"a"\n' + "`,".repeat(200_000) + "````";
+  const text = resultsText([{ rowCount: 1, csv }], -1, []);
+  expect(text.startsWith("Result 1 of 1 · 1 row\n`````csv\n")).toBe(true);
+  expect(text.endsWith("\n`````")).toBe(true);
+});

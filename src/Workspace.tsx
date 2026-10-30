@@ -309,8 +309,17 @@ export function Workspace({
       )
     )
       return;
+    // The confirmation only covers the text present when it was given.
+    const discarded = sql;
     await perform("Reloading script", async (signal) => {
       const content = await readScript(script, signal);
+      if (
+        currentScript.current.script !== script ||
+        currentScript.current.sql !== discarded
+      )
+        throw new Error(
+          `The editor changed while ${script.name} was reloading, so it was kept. Reload from disk again to replace it.`,
+        );
       setSql(content.sql);
       setLoadedSql(content.sql);
       setSelection("");

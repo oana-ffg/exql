@@ -167,6 +167,16 @@ export function ScriptFoldersPanel({
                     Showing the first 2,000 .sql files.
                   </p>
                 )}
+                {!!listing?.unreadable.length && (
+                  <p
+                    className="sidebar-hint form-error"
+                    role="alert"
+                    title={listing.unreadable.join("\n")}
+                  >
+                    Could not search {listing.unreadable.join(", ")}. Scripts
+                    there are not listed.
+                  </p>
+                )}
               </>
             )}
           </details>
