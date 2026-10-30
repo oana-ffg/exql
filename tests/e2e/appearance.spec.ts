@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "../support/fixtures";
 
 test("uses saved connection names and contains long metadata at narrow window sizes", async ({
   page,

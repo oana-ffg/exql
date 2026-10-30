@@ -1,4 +1,6 @@
-import { test, expect } from "@playwright/test";
+import { databaseName } from "../support/database";
+import { fillConnection } from "../support/ui";
+import { test, expect } from "../support/fixtures";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
@@ -51,10 +53,8 @@ test("linked scripts read current disk content, protect edits, run and unlink wi
     await page.getByLabel("Save this connection").uncheck();
     await page
       .getByRole("textbox", { name: "Database", exact: true })
-      .fill("ExqlDemo");
-    await page
-      .getByLabel("Trust server certificate (local development)")
-      .check();
+      .fill(databaseName);
+    await fillConnection(page);
     const connected = page.waitForResponse(
       (response) => response.url().endsWith("/api/connect") && response.ok(),
     );

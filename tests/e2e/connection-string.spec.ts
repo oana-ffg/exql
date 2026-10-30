@@ -1,4 +1,5 @@
-import { test, expect } from "@playwright/test";
+import { connectionString, databaseName, settings } from "../support/database";
+import { test, expect } from "../support/fixtures";
 
 test("paste, save, rename, and reconnect with a vaulted connection string", async ({
   page,
@@ -15,9 +16,7 @@ test("paste, save, rename, and reconnect with a vaulted connection string", asyn
     await page.getByLabel("Connection method").selectOption("connectionString");
     const input = page.getByLabel("Connection string", { exact: true });
     await expect(input).toHaveAttribute("type", "password");
-    await input.fill(
-      "Server=localhost;Database=ExqlDemo;Integrated Security=True;Encrypt=True;TrustServerCertificate=True;Connect Timeout=25;",
-    );
+    await input.fill(connectionString());
     const saved = page.waitForResponse(
       (response) =>
         response.url().endsWith("/api/profiles") &&
@@ -38,7 +37,7 @@ test("paste, save, rename, and reconnect with a vaulted connection string", asyn
     await page.getByRole("button", { name: /No connection/ }).click();
     await page
       .getByRole("button", {
-        name: `${name} localhost / ExqlDemo`,
+        name: `${name} ${settings.server} / ${databaseName}`,
         exact: true,
       })
       .click();

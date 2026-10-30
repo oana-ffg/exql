@@ -1,4 +1,5 @@
-import { test, expect } from "@playwright/test";
+import { connection, databaseName, settings } from "../support/database";
+import { test, expect } from "../support/fixtures";
 import { connectionColors } from "../../src/connectionColors";
 
 test("connection colors persist and update open workspaces without reconnecting", async ({
@@ -41,15 +42,7 @@ test("connection colors persist and update open workspaces without reconnecting"
           name: `${name} ${index + 1}`,
           folder: "",
           color,
-          connection: {
-            server: "localhost",
-            database: "ExqlDemo",
-            authentication: "windows",
-            username: "",
-            password: "",
-            encrypt: true,
-            trustServerCertificate: true,
-          },
+          connection,
         },
       });
       expect(response.ok()).toBe(true);
@@ -83,7 +76,7 @@ test("connection colors persist and update open workspaces without reconnecting"
     await page.getByRole("tabpanel").locator(".connection-card").click();
     await page
       .getByRole("button", {
-        name: `${name} 1 localhost / ExqlDemo`,
+        name: `${name} 1 ${settings.server} / ${databaseName}`,
         exact: true,
       })
       .click();

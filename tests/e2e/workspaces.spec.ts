@@ -1,4 +1,7 @@
-import { test, expect, type Page } from "@playwright/test";
+import { databaseName } from "../support/database";
+import { fillConnection } from "../support/ui";
+import { test, expect } from "../support/fixtures";
+import type { Page } from "@playwright/test";
 
 async function isolatedWorkspace(page: Page) {
   const documents: Record<string, unknown> = {
@@ -22,7 +25,7 @@ async function connect(page: Page, database: string) {
   await page
     .getByRole("textbox", { name: "Database", exact: true })
     .fill(database);
-  await page.getByLabel("Trust server certificate (local development)").check();
+  await fillConnection(page, database);
   await page.getByRole("button", { name: "Connect", exact: true }).click();
   await expect(
     page.getByRole("tabpanel").getByText("Connected", { exact: true }),
@@ -47,7 +50,7 @@ test("independent database workspaces preserve edits, run concurrently, and rest
   const editor = panel.locator(".cm-content");
   try {
     await page.goto("/");
-    await connect(page, "ExqlDemo");
+    await connect(page, databaseName);
     await panel.getByRole("button", { name: "WorkItems", exact: true }).click();
     await panel.getByRole("button", { name: "Add filter" }).click();
     await panel.getByLabel("Filter 1 value").fill("kept draft");
@@ -68,7 +71,7 @@ test("independent database workspaces preserve edits, run concurrently, and rest
     ).toBeVisible();
     await page.screenshot({ path: "artifacts/multiple-databases.png" });
 
-    await page.getByRole("tab", { name: /ExqlDemo/ }).click();
+    await page.getByRole("tab", { name: databaseName, exact: true }).click();
     await expect(panel.getByLabel("Filter 1 value")).toHaveValue("kept draft");
     await expect(panel.locator('[data-cell="0:6"]')).toHaveText(
       "staged only, never committed",
@@ -93,9 +96,9 @@ test("independent database workspaces preserve edits, run concurrently, and rest
       panel.getByRole("gridcell", { name: "master", exact: true }),
     ).toBeVisible();
     await expect.poll(() => page.evaluate(() => window.exqlDirty)).toBe(false);
-    await page.getByRole("tab", { name: /ExqlDemo/ }).click();
+    await page.getByRole("tab", { name: databaseName, exact: true }).click();
     await expect(
-      panel.getByRole("gridcell", { name: "ExqlDemo", exact: true }),
+      panel.getByRole("gridcell", { name: databaseName, exact: true }),
     ).toBeVisible();
     await page.getByRole("tab", { name: /master/ }).click();
     await panel
@@ -103,10 +106,10 @@ test("independent database workspaces preserve edits, run concurrently, and rest
       .click();
     await expect(panel.getByText("Offline", { exact: true })).toBeVisible();
     expect(deleted).toHaveLength(1);
-    await page.getByRole("tab", { name: /ExqlDemo/ }).click();
+    await page.getByRole("tab", { name: databaseName, exact: true }).click();
     await expect(panel.getByText("Connected", { exact: true })).toBeVisible();
     await expect(
-      panel.getByRole("gridcell", { name: "ExqlDemo", exact: true }),
+      panel.getByRole("gridcell", { name: databaseName, exact: true }),
     ).toBeVisible();
 
     await page.route("**/api/connect", (route) =>
