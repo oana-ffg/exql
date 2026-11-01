@@ -1,4 +1,9 @@
-import { useState, type ClipboardEvent, type KeyboardEvent } from "react";
+import {
+  useMemo,
+  useState,
+  type ClipboardEvent,
+  type KeyboardEvent,
+} from "react";
 import { Check, ChevronDown, Copy, KeyRound, LockKeyhole } from "lucide-react";
 import type { Cell, Column, Edit, Filter, GridResult, TableId } from "./types";
 import {
@@ -82,10 +87,20 @@ export function DataGrid({
       },
     };
   }
+  const editIndex = useMemo(() => {
+    const index = new Map<number, Map<string, Edit>>();
+    for (const edit of edits) {
+      const row = edit.row;
+      let columns = index.get(row);
+      if (!columns) index.set(row, (columns = new Map()));
+      columns.set(edit.column, edit);
+    }
+    return index;
+  }, [edits]);
+  const editAt = (row: number, column: string) =>
+    editIndex.get(row)?.get(column);
   const valueAt = (row: number, col: number): Cell => {
-    const edit = edits.find(
-      (e) => e.row === row && e.column === data.columns[col].name,
-    );
+    const edit = editAt(row, data.columns[col].name);
     return edit ? edit.value : data.rows[row][col];
   };
   const indices = selected.size
@@ -96,9 +111,6 @@ export function DataGrid({
           (_, i) => Math.min(active.row, anchor.row) + i,
         )
       : [];
-  const rows = indices.map((row) =>
-    data.columns.map((_, col) => valueAt(row, col)),
-  );
   function openEditor(position: Position) {
     if (
       !disabled &&
@@ -197,6 +209,9 @@ export function DataGrid({
   }
   async function copyRows(format = copyFormat) {
     try {
+      const rows = indices.map((row) =>
+        data.columns.map((_, col) => valueAt(row, col)),
+      );
       const text =
         format === "json"
           ? jsonRows(data.columns, rows)
@@ -258,7 +273,7 @@ export function DataGrid({
         run: () => void copyText(selectionText(), onNotice),
       },
       ...["json", "csv", "sql"].map((format) => ({
-        label: `Copy ${rows.length > 1 ? `${rows.length} rows` : "row"} as ${format.toUpperCase()}`,
+        label: `Copy ${indices.length > 1 ? `${indices.length} rows` : "row"} as ${format.toUpperCase()}`,
         run: () => void copyRows(format),
       })),
       {
@@ -293,11 +308,7 @@ export function DataGrid({
         },
         {
           label: "Revert cell edit",
-          disabled:
-            disabled ||
-            !edits.some(
-              (edit) => edit.row === row && edit.column === column.name,
-            ),
+          disabled: disabled || !editAt(row, column.name),
           run: () =>
             onEdit({ row, column: column.name, value: data.rows[row][col] }),
         },
@@ -340,11 +351,11 @@ export function DataGrid({
             <option value="sql">SQL</option>
           </select>
           <button
-            disabled={!rows.length || disabled}
+            disabled={!indices.length || disabled}
             onClick={() => void copyRows()}
           >
             <Copy size={14} />
-            Copy {rows.length > 1 ? `${rows.length} rows` : "row"}
+            Copy {indices.length > 1 ? `${indices.length} rows` : "row"}
           </button>
         </div>
       </div>
@@ -451,9 +462,7 @@ export function DataGrid({
                 {data.columns.map((column, col) => {
                   const value = valueAt(row, col);
                   const isInRange = inRange(row, col);
-                  const changed = edits.some(
-                    (edit) => edit.row === row && edit.column === column.name,
-                  );
+                  const changed = !!editAt(row, column.name);
                   return (
                     <td
                       key={column.name}

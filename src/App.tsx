@@ -89,7 +89,8 @@ export default function App() {
     window.exqlWorkspaceReady = ready;
     window.exqlDirty = dirty;
     const beforeUnload = (event: BeforeUnloadEvent) => {
-      if (dirty) event.preventDefault();
+      if (dirty || window.exqlPendingWrites || window.exqlStorageFailed)
+        event.preventDefault();
     };
     window.addEventListener("beforeunload", beforeUnload);
     return () => {
