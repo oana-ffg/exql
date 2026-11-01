@@ -7,6 +7,7 @@ namespace Exql;
 
 public static class QueryStore
 {
+    public const int PageSize = 200;
     public const long MaxBytes = 256 * 1024 * 1024;
     public static async Task<QueryResponse> Run(DatabaseSession session, SqlConnection connection, string sql, CancellationToken ct)
     {
@@ -27,24 +28,12 @@ public static class QueryStore
                 var columns = SqlValues.ResultColumns(reader);
                 var id = Guid.NewGuid().ToString("N");
                 var path = Path.Combine(Path.GetTempPath(), $"exql-{id}.jsonl");
-                pending[id] = new(path, columns, 0);
-                long count = 0;
-                List<string?[]> preview = [];
-                await using (var writer = new StreamWriter(new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None), new UTF8Encoding(false)))
-                {
-                    while (await reader.ReadAsync(ct))
-                    {
-                        var row = SqlValues.ReadRow(reader);
-                        var line = JsonSerializer.Serialize(row);
-                        bytes += Encoding.UTF8.GetByteCount(line) + 1;
-                        if (bytes > MaxBytes) throw new InputException("Query results exceeded the 256 MiB snapshot limit. Narrow the query, or use whole-table export for streaming. SQL already executed may have committed changes.");
-                        await writer.WriteLineAsync(line.AsMemory(), ct);
-                        if (preview.Count < 200) preview.Add(row);
-                        count++;
-                    }
-                }
-                pending[id] = new(path, columns, count);
-                results.Add(new(id, columns, count, new(columns, preview, count > 200, count)));
+                pending[id] = new(path, columns, 0, []);
+                var snapshot = await Store(path, columns, ReadRows(reader, ct), MaxBytes - bytes, ct);
+                bytes += snapshot.Bytes;
+                pending[id] = snapshot.Result;
+                results.Add(new(id, columns, snapshot.Result.RowCount,
+                    new(columns, snapshot.Preview, snapshot.Result.RowCount > PageSize, snapshot.Result.RowCount)));
             } while (await reader.NextResultAsync(ct));
             var affected = reader.RecordsAffected;
             session.ClearResults();
@@ -57,25 +46,60 @@ public static class QueryStore
             throw;
         }
     }
+    internal static async Task<(StoredResult Result, List<string?[]> Preview, long Bytes)> Store(
+        string path, List<Column> columns, IAsyncEnumerable<string?[]> rows, long maxBytes, CancellationToken ct)
+    {
+        long count = 0, bytes = 0;
+        List<long> pageOffsets = [];
+        List<string?[]> preview = [];
+        await using var writer = new StreamWriter(new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None), new UTF8Encoding(false));
+        // Fixed LF endings make the byte index independent of the host platform.
+        writer.NewLine = "\n";
+        await foreach (var row in rows.WithCancellation(ct))
+        {
+            var line = JsonSerializer.Serialize(row);
+            var lineBytes = Encoding.UTF8.GetByteCount(line) + 1;
+            if (bytes + lineBytes > maxBytes) throw new InputException("Query results exceeded the 256 MiB snapshot limit. Narrow the query, or use whole-table export for streaming. SQL already executed may have committed changes.");
+            if (count % PageSize == 0) pageOffsets.Add(bytes);
+            bytes += lineBytes;
+            await writer.WriteLineAsync(line.AsMemory(), ct);
+            if (preview.Count < PageSize) preview.Add(row);
+            count++;
+        }
+        return (new(path, columns, count, pageOffsets), preview, bytes);
+    }
     public static StoredResult Get(DatabaseSession session, string id) => session.Results.TryGetValue(id, out var result)
         ? result : throw new InputException("Result snapshot expired. Run the query again.", 404);
 
     public static async IAsyncEnumerable<string?[]> Rows(StoredResult result, [EnumeratorCancellation] CancellationToken ct)
     {
-        using var reader = File.OpenText(result.Path);
+        using var stream = File.OpenRead(result.Path);
+        await foreach (var row in Rows(stream, ct)) yield return row;
+    }
+    private static async IAsyncEnumerable<string?[]> Rows(Stream stream, [EnumeratorCancellation] CancellationToken ct)
+    {
+        using var reader = new StreamReader(stream, leaveOpen: true);
         while (await reader.ReadLineAsync(ct) is { } line) yield return JsonSerializer.Deserialize<string?[]>(line)!;
     }
     public static async Task<GridResult> Page(DatabaseSession session, string id, int offset, CancellationToken ct)
     {
-        if (offset < 0) throw new InputException("Invalid offset.");
         var result = Get(session, id);
+        using var stream = File.OpenRead(result.Path);
+        return await Page(result, offset, stream, ct);
+    }
+    internal static async Task<GridResult> Page(StoredResult result, int offset, Stream stream, CancellationToken ct)
+    {
+        if (offset < 0) throw new InputException("Invalid offset.");
         List<string?[]> rows = [];
-        long index = 0;
-        await foreach (var row in Rows(result, ct))
+        if (offset >= result.RowCount) return new(result.Columns, rows, false, result.RowCount);
+        var page = offset / PageSize;
+        stream.Seek(result.PageOffsets[page], SeekOrigin.Begin);
+        var skip = offset % PageSize;
+        await foreach (var row in Rows(stream, ct))
         {
-            if (index++ < offset) continue;
+            if (skip-- > 0) continue;
             rows.Add(row);
-            if (rows.Count == 200) break;
+            if (rows.Count == PageSize) break;
         }
         return new(result.Columns, rows, offset + rows.Count < result.RowCount, result.RowCount);
     }

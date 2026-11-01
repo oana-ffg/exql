@@ -16,7 +16,7 @@ public sealed class DatabaseSession(string connectionString) : IDisposable
     public void Dispose() => ClearResults();
 }
 
-public sealed record StoredResult(string Path, List<Column> Columns, long RowCount);
+public sealed record StoredResult(string Path, List<Column> Columns, long RowCount, IReadOnlyList<long> PageOffsets);
 
 public sealed class Sessions : IDisposable
 {

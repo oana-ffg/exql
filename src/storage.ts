@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { request } from "./api";
+import { createWorkspaceSaver } from "./workspaceSaver";
 
 declare global {
   interface Window {
@@ -10,15 +11,14 @@ declare global {
   }
 }
 
-// A failed save remains unsafe for restart until that key is successfully saved.
-const failedSaves = new Set<string>();
-
 // Disk-backed workspace state is independent of the desktop host's randomly assigned port.
 export function useStored<T>(key: "scratch" | "library", fallback: T) {
   const [value, setValue] = useState<T>(fallback);
   const latest = useRef(value);
   const [ready, setReady] = useState(false);
-  const queue = useRef<Promise<unknown>>(Promise.resolve());
+  const saver = useRef<{ key: string; save: (value: T) => void } | null>(null);
+  if (saver.current?.key !== key)
+    saver.current = { key, save: createWorkspaceSaver<T>(key, report) };
   useEffect(() => {
     setReady(false);
     const abort = new AbortController();
@@ -47,18 +47,7 @@ export function useStored<T>(key: "scratch" | "library", fallback: T) {
         : change;
     latest.current = next;
     setValue(next);
-    window.exqlPendingWrites = (window.exqlPendingWrites ?? 0) + 1;
-    queue.current = queue.current
-      .then(() => request(`/workspace/${key}`, next))
-      .then(() => failedSaves.delete(key))
-      .catch((error: Error) => {
-        failedSaves.add(key);
-        report(error);
-      })
-      .finally(() => {
-        window.exqlStorageFailed = failedSaves.size > 0;
-        window.exqlPendingWrites = (window.exqlPendingWrites ?? 1) - 1;
-      });
+    saver.current!.save(next);
   }
   return [value, update, ready] as const;
 }
