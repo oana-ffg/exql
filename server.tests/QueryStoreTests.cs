@@ -88,15 +88,51 @@ public sealed class QueryStoreTests(ITestOutputHelper output)
         var path = Path.Combine(Path.GetTempPath(), "exql-test-" + Guid.NewGuid().ToString("N") + ".jsonl");
         try
         {
-            await Assert.ThrowsAsync<InputException>(() => QueryStore.Store(path, [], FixtureRows(1000), 104, CancellationToken.None));
-            Assert.Equal(0, new FileInfo(path).Length);
-            File.Delete(path);
+            foreach (var budget in new[] { 104, 16_000 })
+            {
+                await Assert.ThrowsAsync<InputException>(() => QueryStore.Store(path, [], FixtureRows(1000), budget, CancellationToken.None));
+                Assert.False(File.Exists(path));
+            }
             using var abort = new CancellationTokenSource();
             abort.Cancel();
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() => QueryStore.Store(path, [], FixtureRows(1000), QueryStore.MaxBytes, abort.Token));
-            Assert.Equal(0, new FileInfo(path).Length);
+            Assert.False(File.Exists(path));
         }
         finally { File.Delete(path); }
+    }
+
+    [Fact]
+    public async Task IncompleteSnapshotIsDeletedAfterRowsHaveBeenWritten()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "exql-" + Guid.NewGuid().ToString("N") + ".jsonl");
+        try
+        {
+            var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                QueryStore.Store(path, [], FailingRows(), QueryStore.MaxBytes, CancellationToken.None));
+            Assert.Equal("Row stream failed.", error.Message);
+            Assert.False(File.Exists(path));
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
+    public async Task SnapshotFailureDoesNotDeleteAnExistingFile()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "exql-test-" + Guid.NewGuid().ToString("N") + ".jsonl");
+        try
+        {
+            await File.WriteAllTextAsync(path, "existing snapshot");
+            await Assert.ThrowsAsync<IOException>(() => QueryStore.Store(path, [], FixtureRows(1), QueryStore.MaxBytes, CancellationToken.None));
+            Assert.Equal("existing snapshot", await File.ReadAllTextAsync(path));
+        }
+        finally { File.Delete(path); }
+    }
+
+    private static async IAsyncEnumerable<string?[]> FailingRows()
+    {
+        // Enough data to flush the writer before the later failure.
+        await foreach (var row in FixtureRows(1000)) yield return row;
+        throw new InvalidOperationException("Row stream failed.");
     }
 
     private static async IAsyncEnumerable<string?[]> FixtureRows(int count)

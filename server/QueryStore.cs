@@ -23,42 +23,58 @@ public static class QueryStore
         long affected = -1;
         try
         {
-            for (var batchIndex = 0; batchIndex < batches.Count; batchIndex++)
+            string? failureMessage = null;
+            try
             {
-                var batch = batches[batchIndex];
-                await using var command = new SqlCommand(batch.Text, connection) { CommandTimeout = 120 };
-                for (var repetition = 0; repetition < batch.RepeatCount; repetition++)
+                for (var batchIndex = 0; batchIndex < batches.Count; batchIndex++)
                 {
-                    ct.ThrowIfCancellationRequested();
-                    try
+                    var batch = batches[batchIndex];
+                    await using var command = new SqlCommand(batch.Text, connection) { CommandTimeout = 120 };
+                    for (var repetition = 0; repetition < batch.RepeatCount; repetition++)
                     {
-                        await using var reader = await command.ExecuteReaderAsync(ct);
-                        do
+                        ct.ThrowIfCancellationRequested();
+                        try
                         {
-                            if (reader.FieldCount == 0) continue;
-                            if (results.Count >= 30) throw new InputException("A query can return at most 30 result sets. Split this script into smaller queries. SQL already executed may have committed changes.");
-                            var columns = SqlValues.ResultColumns(reader);
-                            var id = Guid.NewGuid().ToString("N");
-                            var path = Path.Combine(Path.GetTempPath(), $"exql-{id}.jsonl");
-                            pending[id] = new(path, columns, 0, []);
-                            var snapshot = await Store(path, columns, ReadRows(reader, ct), MaxBytes - bytes, ct);
-                            bytes += snapshot.Bytes;
-                            pending[id] = snapshot.Result;
-                            results.Add(new(id, columns, snapshot.Result.RowCount,
-                                new(columns, snapshot.Preview, snapshot.Result.RowCount > PageSize, snapshot.Result.RowCount)));
-                        } while (await reader.NextResultAsync(ct));
-                        if (reader.RecordsAffected >= 0) affected = Math.Max(0, affected) + reader.RecordsAffected;
-                    }
-                    catch (SqlException error) when ((batches.Count > 1 || batch.RepeatCount > 1) && !ct.IsCancellationRequested)
-                    {
-                        var repeat = batch.RepeatCount > 1 ? $" (execution {repetition + 1} of {batch.RepeatCount})" : "";
-                        throw new InputException($"Stopped at batch {batchIndex + 1} of {batches.Count}{repeat}, {batch.ErrorLocation(error.LineNumber, error.Procedure)}. Any changes committed before the error remain. SQL Server error: {error.Message}", innerException: error);
+                            await using var reader = await command.ExecuteReaderAsync(ct);
+                            try
+                            {
+                                do
+                                {
+                                    if (reader.FieldCount == 0) continue;
+                                    if (results.Count >= 30) throw new InputException("A query can return at most 30 result sets. Split this script into smaller queries. SQL already executed may have committed changes.");
+                                    var columns = SqlValues.ResultColumns(reader);
+                                    var id = Guid.NewGuid().ToString("N");
+                                    var path = Path.Combine(Path.GetTempPath(), $"exql-{id}.jsonl");
+                                    var snapshot = await Store(path, columns, ReadRows(reader, ct), MaxBytes - bytes, ct);
+                                    bytes += snapshot.Bytes;
+                                    pending[id] = snapshot.Result;
+                                    results.Add(new(id, columns, snapshot.Result.RowCount,
+                                        new(columns, snapshot.Preview, snapshot.Result.RowCount > PageSize, snapshot.Result.RowCount)));
+                                } while (await reader.NextResultAsync(ct));
+                            }
+                            finally
+                            {
+                                if (reader.RecordsAffected >= 0) affected = Math.Max(0, affected) + reader.RecordsAffected;
+                            }
+                        }
+                        catch (SqlException error) when ((batches.Count > 1 || batch.RepeatCount > 1) && !ct.IsCancellationRequested)
+                        {
+                            var repeat = batch.RepeatCount > 1 ? $" (execution {repetition + 1} of {batch.RepeatCount})" : "";
+                            throw new InputException($"Stopped at batch {batchIndex + 1} of {batches.Count}{repeat}, {batch.ErrorLocation(error.LineNumber, error.Procedure)}. Any changes committed before the error remain. SQL Server error: {error.Message}", innerException: error);
+                        }
                     }
                 }
             }
+            catch (Exception failure) when (!ct.IsCancellationRequested
+                && failure is SqlException or InputException
+                && (results.Count > 0 || messages.Count > 0 || affected >= 0))
+            {
+                failureMessage = failure.Message;
+            }
+            ct.ThrowIfCancellationRequested();
             session.ClearResults();
             foreach (var item in pending) session.Results.Add(item.Key, item.Value);
-            return new(results, affected, messages);
+            return new(results, affected, messages, failureMessage);
         }
         catch
         {
@@ -73,21 +89,32 @@ public static class QueryStore
         long count = 0, bytes = 0;
         List<long> pageOffsets = [];
         List<string?[]> preview = [];
-        await using var writer = new StreamWriter(new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None), new UTF8Encoding(false));
-        // Fixed LF endings make the byte index independent of the host platform.
-        writer.NewLine = "\n";
-        await foreach (var row in rows.WithCancellation(ct))
+        // Only delete files we created, and dispose the writer before deleting on failure.
+        var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+        try
         {
-            var line = JsonSerializer.Serialize(row);
-            var lineBytes = Encoding.UTF8.GetByteCount(line) + 1;
-            if (bytes + lineBytes > maxBytes) throw new InputException("Query results exceeded the 256 MiB snapshot limit. Narrow the query, or use whole-table export for streaming. SQL already executed may have committed changes.");
-            if (count % PageSize == 0) pageOffsets.Add(bytes);
-            bytes += lineBytes;
-            await writer.WriteLineAsync(line.AsMemory(), ct);
-            if (preview.Count < PageSize) preview.Add(row);
-            count++;
+            await using var ownedStream = stream;
+            await using var writer = new StreamWriter(stream, new UTF8Encoding(false));
+            // Fixed LF endings make the byte index independent of the host platform.
+            writer.NewLine = "\n";
+            await foreach (var row in rows.WithCancellation(ct))
+            {
+                var line = JsonSerializer.Serialize(row);
+                var lineBytes = Encoding.UTF8.GetByteCount(line) + 1;
+                if (bytes + lineBytes > maxBytes) throw new InputException("Query results exceeded the 256 MiB snapshot limit. Narrow the query, or use whole-table export for streaming. SQL already executed may have committed changes.");
+                if (count % PageSize == 0) pageOffsets.Add(bytes);
+                bytes += lineBytes;
+                await writer.WriteLineAsync(line.AsMemory(), ct);
+                if (preview.Count < PageSize) preview.Add(row);
+                count++;
+            }
+            return (new(path, columns, count, pageOffsets), preview, bytes);
         }
-        return (new(path, columns, count, pageOffsets), preview, bytes);
+        catch
+        {
+            File.Delete(path);
+            throw;
+        }
     }
     public static StoredResult Get(DatabaseSession session, string id) => session.Results.TryGetValue(id, out var result)
         ? result : throw new InputException("Result snapshot expired. Run the query again.", 404);

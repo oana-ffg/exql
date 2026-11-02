@@ -34,6 +34,59 @@ async function save(page: Page) {
   ).toHaveCount(0);
 }
 
+test("a failed second batch shows earlier rows and messages alongside the error and copies all output", async ({
+  page,
+  context,
+}) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  const response = await runSql(
+    page,
+    "SELECT 42 AS Answer; PRINT 'first batch completed';\nGO\nTHROW 50000, 'Second batch failed', 1;",
+  );
+  expect(response.status()).toBe(200);
+  await expect(page.locator('[data-cell="0:0"]')).toHaveText("42");
+  await expect(page.getByRole("alert")).toContainText(
+    "Stopped at batch 2 of 2",
+  );
+  await expect(page.getByRole("alert")).toContainText("Second batch failed");
+  await page.locator(".query-messages summary").click();
+  await expect(page.locator(".query-messages pre")).toHaveText(
+    "first batch completed",
+  );
+  await expect(
+    page.getByRole("status").filter({ hasText: "Query completed" }),
+  ).toHaveCount(0);
+  await page
+    .getByRole("button", { name: "Copy all as text", exact: true })
+    .click();
+  await expect(page.getByRole("status")).toContainText("Copied 1 result");
+  const copied = (
+    await page.evaluate(() => navigator.clipboard.readText())
+  ).replaceAll("\r\n", "\n");
+  expect(copied).toContain('"Answer"\n"42"');
+  expect(copied).toContain("first batch completed");
+  expect(copied).toContain("Error\n```text\nStopped at batch 2 of 2");
+  expect(copied).toContain("Second batch failed");
+});
+
+test("a messages-only failed run has an error without a success notice", async ({
+  page,
+}) => {
+  const response = await runSql(
+    page,
+    "PRINT 'before failure';\nGO\nTHROW 50000, 'Messages-only failure', 1;",
+  );
+  expect(response.status()).toBe(200);
+  await expect(page.getByRole("alert")).toContainText("Messages-only failure");
+  await expect(
+    page.getByRole("status").filter({ hasText: "Query completed" }),
+  ).toHaveCount(0);
+  await page.locator(".query-messages summary").click();
+  await expect(page.locator(".query-messages pre")).toHaveText(
+    "before failure",
+  );
+});
+
 test("Save commits multi-row multi-cell edits; NULL, empty text and Discard remain distinct", async ({
   page,
 }) => {
@@ -467,6 +520,19 @@ test("script folder Play executes the latest disk contents in the current databa
   expect(await rows(databaseName, "SELECT * FROM dbo.CommandLog")).toEqual([
     { Id: 2, Message: "latest disk content" },
   ]);
+  await writeFile(
+    file,
+    "SELECT 8 AS FromLinkedScript;\nGO\nTHROW 50000, 'Linked script failure', 1;",
+  );
+  const failed = page.waitForResponse((response) =>
+    response.url().endsWith("/query"),
+  );
+  await page
+    .getByRole("button", { name: "Run mutation.sql", exact: true })
+    .click();
+  expect((await failed).status()).toBe(200);
+  await expect(page.locator('[data-cell="0:0"]')).toHaveText("8");
+  await expect(page.getByRole("alert")).toContainText("Linked script failure");
 });
 
 test("two workspaces route grid edits and SQL mutations to their own databases", async ({
