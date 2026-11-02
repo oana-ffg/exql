@@ -3,9 +3,10 @@ using Microsoft.Data.SqlClient;
 
 namespace Exql;
 
-public sealed class DatabaseSession(string connectionString) : IDisposable
+public sealed class DatabaseSession(string connectionString, string? page = null) : IDisposable
 {
     public string ConnectionString { get; } = connectionString;
+    public string? Page { get; } = page;
     public SemaphoreSlim Gate { get; } = new(1, 1);
     public Dictionary<string, StoredResult> Results { get; } = [];
     public void ClearResults()
@@ -21,12 +22,43 @@ public sealed record StoredResult(string Path, List<Column> Columns, long RowCou
 public sealed class Sessions : IDisposable
 {
     private readonly ConcurrentDictionary<string, DatabaseSession> sessions = new();
-    public string Add(string connectionString)
+    private readonly Lock ownership = new();
+    private string? currentPage;
+
+    /// <summary>
+    /// Makes a page load the owner of the workspace and retires the sessions of earlier ones.
+    /// A reload can leave sessions nothing can reach, including connects it interrupted.
+    /// </summary>
+    public async Task Claim(string? page, CancellationToken ct)
     {
-        if (sessions.Count >= 20) throw new InputException("Disconnect an existing session before opening another.");
-        var id = Guid.NewGuid().ToString("N");
-        sessions[id] = new DatabaseSession(connectionString);
-        return id;
+        if (page is null) return;
+        List<DatabaseSession> retired = [];
+        lock (ownership)
+        {
+            if (page == currentPage) return;
+            currentPage = page;
+            foreach (var (id, session) in sessions)
+                if (session.Page is not null && sessions.TryRemove(id, out _)) retired.Add(session);
+        }
+        foreach (var session in retired)
+        {
+            // An operation in progress may still be using its result files.
+            await session.Gate.WaitAsync(ct);
+            try { session.Dispose(); }
+            finally { session.Gate.Release(); }
+        }
+    }
+
+    public string Add(string connectionString, string? page = null)
+    {
+        lock (ownership)
+        {
+            if (page is not null && page != currentPage) throw new InputException("This page was replaced by a newer one.", 409);
+            if (sessions.Count >= 20) throw new InputException("Disconnect an existing session before opening another.");
+            var id = Guid.NewGuid().ToString("N");
+            sessions[id] = new DatabaseSession(connectionString, page);
+            return id;
+        }
     }
     public DatabaseSession Get(string id) => sessions.TryGetValue(id, out var session)
         ? session : throw new InputException("Connection expired. Please reconnect.", 404);

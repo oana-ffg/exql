@@ -1,5 +1,10 @@
 import type { Page } from "@playwright/test";
-import { databaseName, DisposableDatabase, rows } from "../support/database";
+import {
+  connection,
+  databaseName,
+  DisposableDatabase,
+  rows,
+} from "../support/database";
 import { readFile } from "node:fs/promises";
 import {
   connect,
@@ -339,7 +344,7 @@ test("clicking connect during a reconnect does not start a second attempt", asyn
   expect(attempts).toBe(1);
 });
 
-test("repeated reloads free their sessions instead of reaching the session limit", async ({
+test("repeated reloads retire their sessions instead of reaching the session limit", async ({
   page,
 }) => {
   test.setTimeout(180_000);
@@ -350,6 +355,61 @@ test("repeated reloads free their sessions instead of reaching the session limit
     await restart(page);
     await expect(panel.getByText("Connected", { exact: true })).toBeVisible();
   }
+});
+
+test("reloading during a multi-tab restore does not leak sessions", async ({
+  page,
+  request,
+}) => {
+  test.setTimeout(180_000);
+  const headers = { "X-Exql-Client": "1" };
+  const created = await request.post("/api/profiles", {
+    headers,
+    data: { name: "Restore many", folder: "", connection },
+  });
+  expect(created.ok(), await created.text()).toBe(true);
+  const profile = await created.json();
+  const tabs = Array.from({ length: 11 }, (_, index) => ({
+    id: `restore-${index}`,
+    name: `Restore ${index}`,
+    profileId: profile.id,
+    sql: "",
+  }));
+  const saved = await request.post("/api/workspace/scratch", {
+    headers,
+    data: tabs,
+  });
+  expect(saved.ok(), await saved.text()).toBe(true);
+  // How many more sessions the server accepts right now, which exposes any orphans.
+  const capacity = async () => {
+    const opened: string[] = [];
+    for (;;) {
+      const response = await request.post(
+        `/api/profiles/${profile.id}/connect`,
+        { headers, data: {} },
+      );
+      if (!response.ok()) break;
+      opened.push((await response.json()).id);
+    }
+    for (const id of opened)
+      await request.delete(`/api/sessions/${id}`, { headers });
+    return opened.length;
+  };
+  const before = await capacity();
+
+  await page.goto("/");
+  // Each reload lands in the middle of the previous page's reconnects.
+  for (let reload = 0; reload < 6; reload++) await page.reload();
+  const panel = page.getByRole("tabpanel");
+  // Reconnecting renames every tab to the profile's name.
+  for (let index = 0; index < tabs.length; index++) {
+    await page.getByRole("tab").nth(index).click();
+    await expect(panel.getByText("Connected", { exact: true })).toBeVisible();
+  }
+  await expect(panel.getByRole("alert")).toHaveCount(0);
+
+  // Reconnecting also retires anything left by earlier tests, so capacity can only be higher.
+  expect(await capacity()).toBeGreaterThanOrEqual(before - tabs.length);
 });
 
 test("closing a tab still asks before discarding staged cell edits", async ({

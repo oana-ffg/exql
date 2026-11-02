@@ -1,3 +1,6 @@
+// Identifies this page load, so the server can retire the sessions of earlier ones.
+const pageId = crypto.randomUUID();
+
 export async function request<T>(
   path: string,
   body?: unknown,
@@ -6,7 +9,11 @@ export async function request<T>(
 ): Promise<T> {
   const response = await fetch(`/api${path}`, {
     method: method ?? (body === undefined ? "GET" : "POST"),
-    headers: { "Content-Type": "application/json", "X-Exql-Client": "1" },
+    headers: {
+      "Content-Type": "application/json",
+      "X-Exql-Client": "1",
+      "X-Exql-Page": pageId,
+    },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     signal,
   });
@@ -19,14 +26,6 @@ export async function request<T>(
   return response.status === 204
     ? (undefined as T)
     : (response.json() as Promise<T>);
-}
-/** Frees a session while its page unloads, when nothing can show a failure. */
-export function releaseSessionOnUnload(sessionId: string) {
-  void fetch(`/api/sessions/${sessionId}`, {
-    method: "DELETE",
-    headers: { "X-Exql-Client": "1" },
-    keepalive: true,
-  });
 }
 async function exportResponse(
   path: string,

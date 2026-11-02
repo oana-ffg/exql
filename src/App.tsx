@@ -7,7 +7,7 @@ import {
 } from "react";
 import { Database, LoaderCircle, Plus, X } from "lucide-react";
 import { useScriptFolders } from "./scriptFolders";
-import { releaseSessionOnUnload, request } from "./api";
+import { request } from "./api";
 import { ConnectionDialog } from "./ConnectionDialog";
 import { UpdateNotice } from "./UpdateNotice";
 import { Workspace } from "./Workspace";
@@ -114,19 +114,6 @@ export default function App() {
       setError((event as CustomEvent<string>).detail);
     window.addEventListener("exql-storage-error", handler);
     return () => window.removeEventListener("exql-storage-error", handler);
-  }, []);
-  // Reloading the page starts new sessions, so the old ones must not pile up.
-  const liveSessions = useRef(sessions);
-  useLayoutEffect(() => {
-    liveSessions.current = sessions;
-  });
-  useEffect(() => {
-    const release = () => {
-      for (const session of Object.values(liveSessions.current))
-        if (session) releaseSessionOnUnload(session.id);
-    };
-    window.addEventListener("pagehide", release);
-    return () => window.removeEventListener("pagehide", release);
   }, []);
   const reportActivity = useCallback((id: string, next: Activity) => {
     setActivity((current) => ({ ...current, [id]: next }));

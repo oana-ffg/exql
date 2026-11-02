@@ -61,16 +61,18 @@ public static class ExqlHost
         app.MapPost("/api/workspace/{key}", (string key, System.Text.Json.JsonElement value, WorkspaceStore workspace) => { workspace.Write(key, value); return Results.NoContent(); });
         app.MapPost("/api/profiles", (SaveProfileRequest request, ConnectionProfiles profiles) => profiles.Save(request));
         app.MapDelete("/api/profiles/{id}", (string id, ConnectionProfiles profiles) => { profiles.Delete(id); return Results.NoContent(); });
-        app.MapPost("/api/profiles/{id}/connect", async (string id, ConnectionProfiles profiles, Sessions sessions, CancellationToken ct) =>
-            await Connect(profiles.Resolve(id), sessions, ct, profiles.Get(id)));
-        app.MapPost("/api/connect", (ConnectionRequest request, Sessions sessions, CancellationToken ct) => Connect(request, sessions, ct));
-        static async Task<IResult> Connect(ConnectionRequest request, Sessions sessions, CancellationToken ct, ConnectionProfile? profile = null)
+        app.MapPost("/api/profiles/{id}/connect", async (string id, ConnectionProfiles profiles, Sessions sessions, HttpContext context, CancellationToken ct) =>
+            await Connect(profiles.Resolve(id), sessions, context, ct, profiles.Get(id)));
+        app.MapPost("/api/connect", (ConnectionRequest request, Sessions sessions, HttpContext context, CancellationToken ct) => Connect(request, sessions, context, ct));
+        static async Task<IResult> Connect(ConnectionRequest request, Sessions sessions, HttpContext context, CancellationToken ct, ConnectionProfile? profile = null)
         {
+            var page = context.Request.Headers["X-Exql-Page"].FirstOrDefault();
+            await sessions.Claim(page, ct);
             var connectionString = Sessions.BuildConnectionString(request);
             await using var connection = new SqlConnection(connectionString);
             await connection.OpenAsync(ct);
             var catalog = await Database.Catalog(connection, ct);
-            return Results.Ok(new { id = sessions.Add(connectionString), name = profile?.Name ?? connection.Database, color = profile?.Color, profileId = profile?.Id, catalog, database = connection.Database, server = connection.DataSource, serverVersion = connection.ServerVersion });
+            return Results.Ok(new { id = sessions.Add(connectionString, page), name = profile?.Name ?? connection.Database, color = profile?.Color, profileId = profile?.Id, catalog, database = connection.Database, server = connection.DataSource, serverVersion = connection.ServerVersion });
         }
 
         var api = app.MapGroup("/api/sessions/{id}");
