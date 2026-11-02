@@ -1,5 +1,5 @@
 import { databaseName } from "../support/database";
-import { fillConnection } from "../support/ui";
+import { fillConnection, stubFolderPicker } from "../support/ui";
 import { test, expect } from "../support/fixtures";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -61,27 +61,44 @@ test("linked scripts read current disk content, protect edits, run and unlink wi
     await page.getByRole("button", { name: "Connect", exact: true }).click();
     sessionId = (await (await connected).json()).id;
     const panel = page.getByRole("tabpanel");
-    await panel
-      .getByRole("button", { name: "SQL scripts", exact: true })
-      .click();
-    await panel
-      .getByRole("button", { name: "Add script folder", exact: true })
-      .click();
-    await page.getByLabel("Folder path").fill("relative-path");
-    await page.getByRole("button", { name: "Add folder", exact: true }).click();
-    await expect(page.getByRole("dialog").getByRole("alert")).toContainText(
-      "fully qualified",
-    );
-    await page.getByLabel("Folder path").fill(`"${directory}"`);
+    const openScripts = () =>
+      panel.getByRole("button", { name: "SQL scripts", exact: true }).click();
+    const addFolder = panel.getByRole("button", {
+      name: "Add script folder",
+      exact: true,
+    });
+    await openScripts();
+    // A plain browser has no native picker to open.
+    await expect(addFolder).toBeDisabled();
+    await panel.getByRole("button", { name: "Database", exact: true }).click();
+
+    await stubFolderPicker(page, { path: null });
+    await openScripts();
+    await addFolder.click();
+    await expect(addFolder).toBeEnabled();
+    await expect(panel.locator(".linked-folder")).toHaveCount(0);
+    await expect(page.getByRole("alert")).toHaveCount(0);
+
+    for (const [reply, message] of [
+      [{ path: "relative-path" }, "fully qualified"],
+      [{ path: null, error: "Picker failed" }, "Picker failed"],
+    ] as const) {
+      await stubFolderPicker(page, reply);
+      await addFolder.click();
+      const alert = page.getByRole("alert").filter({ hasText: message });
+      await expect(alert).toBeVisible();
+      await alert.getByRole("button", { name: "Dismiss error" }).click();
+    }
+
+    await stubFolderPicker(page, { path: directory });
     const added = page.waitForResponse(
       (response) =>
         response.url().endsWith("/api/script-folders") &&
         response.request().method() === "POST" &&
         response.ok(),
     );
-    await page.getByRole("button", { name: "Add folder", exact: true }).click();
+    await addFolder.click();
     folderId = (await (await added).json()).id;
-    await expect(page.getByRole("dialog")).toHaveCount(0);
     const folder = panel.locator(".linked-folder").filter({
       has: page.locator(`summary[title=${JSON.stringify(directory)}]`),
     });

@@ -1,42 +1,6 @@
 import { useEffect, useState } from "react";
 import { Download, RefreshCw, X } from "lucide-react";
-
-interface UpdateState {
-  status:
-    | "unavailable"
-    | "idle"
-    | "checking"
-    | "downloading"
-    | "current"
-    | "ready"
-    | "error";
-  currentVersion: string;
-  availableVersion: string | null;
-  progress: number;
-  message: string | null;
-}
-
-interface DesktopMessage {
-  data: { type: string; state: UpdateState };
-}
-
-declare global {
-  interface Window {
-    chrome?: {
-      webview?: {
-        postMessage(message: string): void;
-        addEventListener(
-          type: "message",
-          handler: (event: DesktopMessage) => void,
-        ): void;
-        removeEventListener(
-          type: "message",
-          handler: (event: DesktopMessage) => void,
-        ): void;
-      };
-    };
-  }
-}
+import type { DesktopMessage, UpdateState } from "./desktopBridge";
 
 export function UpdateNotice() {
   const [state, setState] = useState<UpdateState | null>(null);

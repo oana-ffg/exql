@@ -19,6 +19,7 @@ import {
   gridCell,
   openTable,
   runSql,
+  stubFolderPicker,
 } from "../support/ui";
 
 test.beforeEach(async ({ page }) => {
@@ -443,12 +444,11 @@ test("script folder Play executes the latest disk contents in the current databa
   await mkdir(directory, { recursive: true });
   const file = resolve(directory, "mutation.sql");
   await writeFile(file, "INSERT dbo.CommandLog VALUES(1,N'old disk content');");
+  await stubFolderPicker(page, { path: directory });
   await page.getByRole("button", { name: "SQL scripts", exact: true }).click();
   await page
     .getByRole("button", { name: "Add script folder", exact: true })
     .click();
-  await page.getByLabel("Folder path").fill(directory);
-  await page.getByRole("button", { name: "Add folder", exact: true }).click();
   await page.getByRole("button", { name: /^mutation\.sql/ }).click();
   await expect(page.locator(".cm-content")).toHaveText(
     "INSERT dbo.CommandLog VALUES(1,N'old disk content');",

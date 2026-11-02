@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { request } from "./api";
+import { pickFolder } from "./desktopBridge";
 
 export interface ScriptFile {
   path: string;
@@ -42,6 +43,7 @@ export type ScriptFoldersState = ReturnType<typeof useScriptFolders>;
 export function useScriptFolders(onError: (message: string) => void) {
   const [folders, setFolders] = useState<ScriptFolder[]>([]);
   const [listings, setListings] = useState<Record<string, Listing>>({});
+  const [adding, setAdding] = useState(false);
   const controller = useRef<AbortController | null>(null);
   const refresh = useCallback(async () => {
     controller.current?.abort();
@@ -89,9 +91,18 @@ export function useScriptFolders(onError: (message: string) => void) {
     };
   }, [refresh]);
 
-  async function add(path: string) {
-    await request<ScriptFolder>("/script-folders", { path });
-    await refresh();
+  async function addFromPicker() {
+    setAdding(true);
+    try {
+      const path = await pickFolder();
+      if (path === null) return;
+      await request<ScriptFolder>("/script-folders", { path });
+      await refresh();
+    } catch (error) {
+      onError((error as Error).message);
+    } finally {
+      setAdding(false);
+    }
   }
   async function remove(folder: ScriptFolder) {
     if (
@@ -112,5 +123,5 @@ export function useScriptFolders(onError: (message: string) => void) {
       onError((error as Error).message);
     }
   }
-  return { folders, listings, refresh, add, remove };
+  return { folders, listings, refresh, adding, addFromPicker, remove };
 }

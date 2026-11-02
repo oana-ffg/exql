@@ -44,7 +44,8 @@ const folders: ScriptFoldersState = {
   folders: [],
   listings: {},
   refresh: async () => {},
-  add: async () => {},
+  adding: false,
+  addFromPicker: async () => {},
   remove: async () => {},
 };
 function grid(rows = 200, columns = 10): GridResult {

@@ -106,3 +106,29 @@ export async function runSql(page: Page, sql: string) {
   await panel.getByRole("button", { name: /Run SQL/ }).click();
   return response;
 }
+
+// The native folder dialog only exists in the desktop host, so browser journeys
+// answer its bridge message. scripts/verify-desktop.mjs drives the real dialog.
+export async function stubFolderPicker(
+  page: Page,
+  reply: { path: string | null; error?: string },
+) {
+  await page.evaluate(({ path, error = null }) => {
+    const listeners = new Set<(event: unknown) => void>();
+    Object.assign((window.chrome ??= {}), {
+      webview: {
+        addEventListener: (_type: string, receive: (event: unknown) => void) =>
+          listeners.add(receive),
+        removeEventListener: (
+          _type: string,
+          receive: (event: unknown) => void,
+        ) => listeners.delete(receive),
+        postMessage: (message: string) => {
+          if (message !== "folders.pick") return;
+          for (const receive of [...listeners])
+            receive({ data: { type: "folder-picked", path, error } });
+        },
+      },
+    });
+  }, reply);
+}

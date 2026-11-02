@@ -24,23 +24,17 @@ public sealed class ScriptFoldersTests : IDisposable
     [Fact]
     public void NormalizesDeduplicatesAndPersistsFoldersWithoutChangingFiles()
     {
-        var variable = "EXQL_TEST_" + Guid.NewGuid().ToString("N");
-        Environment.SetEnvironmentVariable(variable, scripts);
-        try
-        {
-            var folder = store.Add($"  \"%{variable}%{Path.DirectorySeparatorChar}\"  ");
-            Assert.Equal(scripts, folder.Path);
-            Assert.Equal("Scripts", folder.Name);
-            Assert.Equal(folder, store.Add(scripts.ToUpperInvariant()));
-            var fresh = new ScriptFolders(new AppPaths(Path.Combine(root, "State")));
-            Assert.Equal(folder, Assert.Single(fresh.List()));
-            var file = Path.Combine(scripts, "keep.sql");
-            File.WriteAllText(file, "SELECT 1;");
-            fresh.Delete(folder.Id);
-            Assert.Empty(store.List());
-            Assert.Equal("SELECT 1;", File.ReadAllText(file));
-        }
-        finally { Environment.SetEnvironmentVariable(variable, null); }
+        var folder = store.Add(scripts + Path.DirectorySeparatorChar);
+        Assert.Equal(scripts, folder.Path);
+        Assert.Equal("Scripts", folder.Name);
+        Assert.Equal(folder, store.Add(scripts.ToUpperInvariant()));
+        var fresh = new ScriptFolders(new AppPaths(Path.Combine(root, "State")));
+        Assert.Equal(folder, Assert.Single(fresh.List()));
+        var file = Path.Combine(scripts, "keep.sql");
+        File.WriteAllText(file, "SELECT 1;");
+        fresh.Delete(folder.Id);
+        Assert.Empty(store.List());
+        Assert.Equal("SELECT 1;", File.ReadAllText(file));
     }
 
     [Fact]
