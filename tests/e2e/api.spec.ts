@@ -493,12 +493,8 @@ test("GO failure identifies the script line, stops later batches and preserves e
   });
   expect(response.status()).toBe(400);
   const { error } = await response.json();
-  expect(error).toContain("Batch 2 of 3");
-  expect(error).toContain("script line 5");
-  expect(error).toContain("GO journey error");
-  expect(error).toContain("Execution stopped.");
-  expect(error).toContain(
-    "Earlier batches already ran and any changes they committed remain.",
+  expect(error).toBe(
+    "Stopped at batch 2 of 3, script line 5. Any changes committed before the error remain. SQL Server error: GO journey error",
   );
   expect(await rows(databaseName, "SELECT * FROM dbo.CommandLog")).toEqual([
     { Id: 1, Message: "before error" },
@@ -550,11 +546,40 @@ test("a failed GO repetition stops further repetitions and batches", async () =>
   });
   expect(response.status()).toBe(400);
   const { error } = await response.json();
-  expect(error).toContain("Batch 2 of 3 (execution 2 of 3), script line 3");
+  expect(error).toContain(
+    "Stopped at batch 2 of 3 (execution 2 of 3), script line 3.",
+  );
   expect(error).toContain("PRIMARY KEY");
   expect(await rows(databaseName, "SELECT * FROM dbo.CommandLog")).toEqual([
     { Id: 1, Message: "first repetition" },
   ]);
+});
+
+test("a failed repetition of a lone batch reports the execution", async () => {
+  const response = await api.post(url("/query"), {
+    data: { sql: "INSERT dbo.CommandLog VALUES(1,N'first run');\nGO 3" },
+  });
+  expect(response.status()).toBe(400);
+  const { error } = await response.json();
+  expect(error).toContain(
+    "Stopped at batch 1 of 1 (execution 2 of 3), script line 1.",
+  );
+  expect(error).toContain("Any changes committed before the error remain.");
+  expect(await rows(databaseName, "SELECT * FROM dbo.CommandLog")).toEqual([
+    { Id: 1, Message: "first run" },
+  ]);
+});
+
+test("an error inside a procedure reports the procedure line, not a script line", async () => {
+  const response = await api.post(url("/query"), {
+    data: {
+      sql: "CREATE PROCEDURE dbo.GoFails AS\nSELECT 1;\nSELECT 2;\nTHROW 50000, 'inside procedure', 1;\nGO\nEXEC dbo.GoFails;",
+    },
+  });
+  expect(response.status()).toBe(400);
+  expect((await response.json()).error).toBe(
+    "Stopped at batch 2 of 2, starting on script line 6, at line 4 of dbo.GoFails. Any changes committed before the error remain. SQL Server error: inside procedure",
+  );
 });
 
 test("single batch SQL errors remain plain and zero affected rows remain visible", async () => {

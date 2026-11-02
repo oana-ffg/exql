@@ -11,7 +11,8 @@ public static class QueryStore
     public const long MaxBytes = 256 * 1024 * 1024;
     public static async Task<QueryResponse> Run(DatabaseSession session, SqlConnection connection, string sql, CancellationToken ct)
     {
-        var batches = SqlBatches.Split(sql);
+        // A request that omits the text binds null despite the non-nullable model property.
+        List<SqlBatch> batches = string.IsNullOrWhiteSpace(sql) ? [] : SqlBatches.Split(sql);
         if (batches.Count == 0) throw new InputException("Enter SQL to run.");
         List<string> messages = [];
         void OnInfoMessage(object sender, SqlInfoMessageEventArgs args) { if (messages.Count < 200) messages.Add(args.Message); }
@@ -48,11 +49,10 @@ public static class QueryStore
                         } while (await reader.NextResultAsync(ct));
                         if (reader.RecordsAffected >= 0) affected = Math.Max(0, affected) + reader.RecordsAffected;
                     }
-                    catch (SqlException error) when (batches.Count > 1 && !ct.IsCancellationRequested)
+                    catch (SqlException error) when ((batches.Count > 1 || batch.RepeatCount > 1) && !ct.IsCancellationRequested)
                     {
-                        var line = batch.StartLine + error.LineNumber - 1;
                         var repeat = batch.RepeatCount > 1 ? $" (execution {repetition + 1} of {batch.RepeatCount})" : "";
-                        throw new InputException($"Batch {batchIndex + 1} of {batches.Count}{repeat}, script line {line}: {error.Message} Execution stopped. Earlier batches already ran and any changes they committed remain.", innerException: error);
+                        throw new InputException($"Stopped at batch {batchIndex + 1} of {batches.Count}{repeat}, {batch.ErrorLocation(error.LineNumber, error.Procedure)}. Any changes committed before the error remain. SQL Server error: {error.Message}", innerException: error);
                     }
                 }
             }

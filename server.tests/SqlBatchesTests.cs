@@ -118,13 +118,25 @@ public sealed class SqlBatchesTests
     }
 
     [Theory]
+    [InlineData(1, null, "script line 7")]
+    [InlineData(3, "", "script line 9")]
+    [InlineData(3, "dbo.Fails", "starting on script line 7, at line 3 of dbo.Fails")]
+    [InlineData(0, null, "starting on script line 7")]
+    [InlineData(0, "dbo.Fails", "starting on script line 7")]
+    public void ErrorLocationOnlyOffsetsLinesRaisedByTheBatchItself(int errorLine, string? procedure, string expected)
+    {
+        Assert.Equal(expected, new SqlBatch("SELECT 1;", 7, 1).ErrorLocation(errorLine, procedure));
+    }
+
+    [Theory]
     [InlineData("SELECT 1;\nGO\nINSERT dbo.Items VALUES (1);\nGO 0", "GO count on line 4")]
     [InlineData("GO", "Enter SQL to run.")]
-    public async Task RunValidatesBeforeExecutingAnySql(string sql, string message)
+    [InlineData(null, "Enter SQL to run.")]
+    public async Task RunValidatesBeforeExecutingAnySql(string? sql, string message)
     {
         using var session = new DatabaseSession("");
         await using var connection = new SqlConnection();
-        var error = await Assert.ThrowsAsync<InputException>(() => QueryStore.Run(session, connection, sql, CancellationToken.None));
+        var error = await Assert.ThrowsAsync<InputException>(() => QueryStore.Run(session, connection, sql!, CancellationToken.None));
         Assert.Contains(message, error.Message);
     }
 

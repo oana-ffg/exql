@@ -2,7 +2,18 @@ using System.Globalization;
 
 namespace Exql;
 
-internal sealed record SqlBatch(string Text, int StartLine, int RepeatCount);
+internal sealed record SqlBatch(string Text, int StartLine, int RepeatCount)
+{
+    // A SQL error's line counts from the batch start only when the batch itself raised it.
+    // Modules report a line within the module; timeouts and connection failures report 0.
+    public string ErrorLocation(int errorLine, string? procedure)
+    {
+        if (errorLine <= 0) return $"starting on script line {StartLine}";
+        return string.IsNullOrEmpty(procedure)
+            ? $"script line {StartLine + errorLine - 1}"
+            : $"starting on script line {StartLine}, at line {errorLine} of {procedure}";
+    }
+}
 
 internal static class SqlBatches
 {
