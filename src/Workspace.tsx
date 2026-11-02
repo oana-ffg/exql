@@ -58,6 +58,7 @@ const SqlEditor = lazy(() =>
 export function Workspace({
   id,
   active,
+  closing,
   session,
   onSession,
   sql,
@@ -65,11 +66,16 @@ export function Workspace({
   library,
   scriptFolders,
   setLibrary,
+  savedConnection,
+  reconnecting,
+  reconnectError,
   onConnect,
+  onChooseConnection,
   onActivity,
 }: {
   id: string;
   active: boolean;
+  closing: boolean;
   session: Session | null;
   onSession: (session: Session | null) => void;
   sql: string;
@@ -77,7 +83,11 @@ export function Workspace({
   library: Library;
   scriptFolders: ScriptFoldersState;
   setLibrary: (change: Library | ((current: Library) => Library)) => void;
+  savedConnection: string | null;
+  reconnecting: boolean;
+  reconnectError: string;
   onConnect: () => void;
+  onChooseConnection: () => void;
   onActivity: (id: string, state: { busy: string; edits: number }) => void;
 }) {
   const [mode, setMode] = useState<"table" | "query">(
@@ -471,6 +481,8 @@ export function Workspace({
       role="tabpanel"
       aria-labelledby={`tab-${id}`}
       hidden={!active}
+      // Text typed while its tab is closing would be in neither the saved file nor the tab.
+      inert={closing}
     >
       <Sidebar
         visible={active}
@@ -525,7 +537,7 @@ export function Workspace({
           </div>
           <div className="connection-status">
             <span className={`connection-dot ${session ? "connected" : ""}`} />
-            {session ? "Connected" : "Offline"}
+            {session ? "Connected" : reconnecting ? "Reconnecting…" : "Offline"}
             {session && (
               <button
                 className="icon-button"
@@ -771,12 +783,32 @@ export function Workspace({
                   ? "Choose a table from the explorer, or open a query."
                   : "Connect to a database, or open SQL scripts from the sidebar."}
             </p>
-            {!session && (
-              <button className="primary" onClick={onConnect}>
-                <PlugZap size={16} />
-                Connect to database
-                <ArrowRight size={16} />
-              </button>
+            {!session && reconnecting && (
+              <p role="status">
+                <LoaderCircle size={14} className="spin" /> Reconnecting to{" "}
+                {savedConnection}…
+              </p>
+            )}
+            {!session && !reconnecting && (
+              <>
+                {reconnectError && (
+                  <p className="form-error" role="alert">
+                    Could not reconnect to {savedConnection}: {reconnectError}
+                  </p>
+                )}
+                <button className="primary" onClick={onConnect}>
+                  <PlugZap size={16} />
+                  {savedConnection
+                    ? `Reconnect to ${savedConnection}`
+                    : "Connect to database"}
+                  <ArrowRight size={16} />
+                </button>
+                {savedConnection && (
+                  <button onClick={onChooseConnection}>
+                    Use a different connection
+                  </button>
+                )}
+              </>
             )}
           </div>
         )}

@@ -12,13 +12,25 @@ export const test = base.extend<{ isolatedDatabase: void }>({
         /\/api\/(connect|profiles\/[^/]+\/connect)$/.test(response.url())
       )
         responses.push(
-          response.json().then(({ id }) => {
-            sessions.add(id);
-          }),
+          response.json().then(
+            ({ id }) => {
+              sessions.add(id);
+            },
+            (error: Error) => {
+              // A reload discards the bodies of responses it interrupted.
+              if (!error.message.includes("No resource with given identifier"))
+                throw error;
+            },
+          ),
         );
     });
     await use(page);
-    await Promise.all(responses);
+    // The body of a response interrupted by a reload may never arrive. The server
+    // retires that session when the next page load connects, so stop waiting.
+    await Promise.race([
+      Promise.all(responses),
+      new Promise((resolve) => setTimeout(resolve, 5_000)),
+    ]);
     // Aborting a failed journey's query also releases its per-session gate.
     const cancel = page.locator(".cancel-button:visible");
     if (!page.isClosed() && (await cancel.count())) await cancel.click();

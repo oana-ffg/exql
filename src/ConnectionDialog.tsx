@@ -1,12 +1,5 @@
 import { useEffect, useState } from "react";
-import {
-  ArrowRight,
-  Database,
-  Folder,
-  Plus,
-  ShieldCheck,
-  Trash2,
-} from "lucide-react";
+import { ArrowRight, Database, Folder, Plus, ShieldCheck } from "lucide-react";
 import { ContextMenu, useContextMenu } from "./ContextMenu";
 import { Modal } from "./Modal";
 import { request } from "./api";
@@ -199,8 +192,10 @@ export function ConnectionDialog({
                         <button
                           type="button"
                           disabled={disabled}
+                          aria-label={`Connect to ${profile.name}`}
+                          title={`Connect to ${profile.name}. Right-click for more.`}
                           className="profile-select"
-                          onClick={() => selectProfile(profile)}
+                          onClick={() => void connectSaved(profile)}
                         >
                           <Database size={14} />
                           <span>
@@ -210,24 +205,6 @@ export function ConnectionDialog({
                               {profile.connection.database}
                             </small>
                           </span>
-                        </button>
-                        <button
-                          type="button"
-                          disabled={disabled}
-                          aria-label={`Connect to ${profile.name}`}
-                          className="icon-button"
-                          onClick={() => connectSaved(profile)}
-                        >
-                          <ArrowRight size={16} />
-                        </button>
-                        <button
-                          type="button"
-                          disabled={disabled}
-                          aria-label={`Delete connection ${profile.name}`}
-                          className="icon-button"
-                          onClick={() => void deleteProfile(profile)}
-                        >
-                          <Trash2 size={13} />
                         </button>
                       </div>
                     ))}

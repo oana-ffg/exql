@@ -141,6 +141,7 @@ it("keeps visible and hidden Workspace grids out of real CodeMirror typing and s
   const drafts = sessions.map((session, i) => ({
     id: session.id,
     name: session.name,
+    profileId: session.id,
     sql: `SELECT '${i === 0 ? "first" : "second"}';`,
   }));
   vi.stubGlobal(
@@ -189,22 +190,6 @@ it("keeps visible and hidden Workspace grids out of real CodeMirror typing and s
     }),
   );
   await act(async () => root.render(createElement(App)));
-  for (let index = 0; index < sessions.length; index++) {
-    await act(async () =>
-      host.querySelectorAll<HTMLButtonElement>('[role="tab"]')[index].click(),
-    );
-    await click(host, "Add connection");
-    await act(async () =>
-      host
-        .querySelector<HTMLButtonElement>(
-          `[aria-label="Connect to ${sessions[index].name}"]`,
-        )!
-        .click(),
-    );
-  }
-  await act(async () =>
-    host.querySelectorAll<HTMLButtonElement>('[role="tab"]')[0].click(),
-  );
   const workspaces = [
     ...host.querySelectorAll<HTMLElement>('[role="tabpanel"]'),
   ];
@@ -337,6 +322,7 @@ it("grid callbacks keep current rows, edits, filters, sort direction, and sessio
       createElement(Workspace, {
         id: "table",
         active: true,
+        closing: false,
         session: connection,
         onSession: noop,
         sql: "",
@@ -344,7 +330,11 @@ it("grid callbacks keep current rows, edits, filters, sort direction, and sessio
         library,
         scriptFolders: folders,
         setLibrary: noop,
+        savedConnection: null,
+        reconnecting: false,
+        reconnectError: "",
         onConnect: noop,
+        onChooseConnection: noop,
         onActivity: noop,
       }),
     );

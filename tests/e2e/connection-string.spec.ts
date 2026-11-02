@@ -1,4 +1,4 @@
-import { connectionString, databaseName, settings } from "../support/database";
+import { connectionString } from "../support/database";
 import { test, expect } from "../support/fixtures";
 
 test("paste, save, rename, and reconnect with a vaulted connection string", async ({
@@ -34,13 +34,13 @@ test("paste, save, rename, and reconnect with a vaulted connection string", asyn
     await page.getByRole("button", { name: "WorkItems", exact: true }).click();
     await expect(page.locator("tbody tr")).toHaveCount(200);
     await page.getByRole("button", { name: "Disconnect", exact: true }).click();
-    await page.getByRole("button", { name: /No connection/ }).click();
     await page
-      .getByRole("button", {
-        name: `${name} ${settings.server} / ${databaseName}`,
-        exact: true,
-      })
+      .getByRole("button", { name: "Use a different connection", exact: true })
       .click();
+    await page
+      .getByRole("button", { name: `Connect to ${name}`, exact: true })
+      .click({ button: "right" });
+    await page.getByRole("menuitem", { name: "Edit", exact: true }).click();
     await expect(
       page.getByLabel("Keep the saved connection string"),
     ).toBeChecked();

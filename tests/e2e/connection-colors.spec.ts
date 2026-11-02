@@ -1,4 +1,4 @@
-import { connection, databaseName, settings } from "../support/database";
+import { connection } from "../support/database";
 import { test, expect } from "../support/fixtures";
 import { connectionColors } from "../../src/connectionColors";
 
@@ -75,11 +75,9 @@ test("connection colors persist and update open workspaces without reconnecting"
     await expect.poll(() => colorOf(".connection-tab.active")).toBe("#89b4fa");
     await page.getByRole("tabpanel").locator(".connection-card").click();
     await page
-      .getByRole("button", {
-        name: `${name} 1 ${settings.server} / ${databaseName}`,
-        exact: true,
-      })
-      .click();
+      .getByRole("button", { name: `Connect to ${name} 1`, exact: true })
+      .click({ button: "right" });
+    await page.getByRole("menuitem", { name: "Edit", exact: true }).click();
     // Colors saved before the RAG palette remain editable as custom colors.
     await expect(page.getByLabel("Custom connection color")).toHaveValue(
       "#89b4fa",

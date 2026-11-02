@@ -2,7 +2,6 @@ import {
   connection,
   connectionString,
   databaseName,
-  settings,
 } from "../support/database";
 import { test, expect } from "../support/fixtures";
 
@@ -39,7 +38,7 @@ test("saved profiles clone from the row menu with a new name and color", async (
       .click();
     const row = page.locator(".profile-row").filter({
       has: page.getByRole("button", {
-        name: `${name} ${settings.server} / ${databaseName}`,
+        name: `Connect to ${name}`,
         exact: true,
       }),
     });
@@ -77,7 +76,7 @@ test("saved profiles clone from the row menu with a new name and color", async (
     ).toHaveCount(0);
     await expect(
       page.getByRole("button", {
-        name: `${name} (copy) ${settings.server} / ${databaseName}`,
+        name: `Connect to ${name} (copy)`,
         exact: true,
       }),
     ).toBeVisible();
@@ -154,7 +153,7 @@ for (const authentication of ["sql", "connectionString"]) {
         .click();
       const row = page.locator(".profile-row").filter({
         has: page.getByRole("button", {
-          name: `${name} ${settings.server} / ${databaseName}`,
+          name: `Connect to ${name}`,
           exact: true,
         }),
       });
@@ -194,7 +193,8 @@ for (const authentication of ["sql", "connectionString"]) {
       ).toHaveCount(0);
       await row.click({ button: "right" });
       await page.getByRole("menuitem", { name: "Clone…", exact: true }).click();
-      await row.locator(".profile-select").click();
+      await row.click({ button: "right" });
+      await page.getByRole("menuitem", { name: "Edit", exact: true }).click();
       await expect(
         page.getByText(`Clone of ${name}`, { exact: true }),
       ).toHaveCount(0);

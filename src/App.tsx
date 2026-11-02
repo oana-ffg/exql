@@ -25,19 +25,25 @@ interface Draft {
   sql: string;
   color?: string;
   profileId?: string | null;
+  disconnected?: boolean;
 }
 interface Activity {
   busy: string;
   edits: number;
 }
+interface Reconnect {
+  pending: boolean;
+  error: string;
+}
 type Scratch = string | Draft[];
 const emptyLibrary: Library = { folders: [], queries: [] };
+const blankTabName = "Workspace";
 const draftsFrom = (scratch: Scratch): Draft[] =>
   (typeof scratch === "string" || !scratch.length
     ? [
         {
           id: "scratch",
-          name: "Workspace",
+          name: blankTabName,
           sql: typeof scratch === "string" ? scratch : "",
         },
       ]
@@ -58,7 +64,11 @@ export default function App() {
   const [sessions, setSessions] = useState<Record<string, Session | null>>({});
   const [activeId, setActiveId] = useState<string | null>(null);
   const [activity, setActivity] = useState<Record<string, Activity>>({});
-  const [connectionOpen, setConnectionOpen] = useState(false);
+  // A target is the offline tab whose own button opened the dialog.
+  const [connectionDialog, setConnectionDialog] = useState<{
+    target: string | null;
+  } | null>(null);
+  const [reconnects, setReconnects] = useState<Record<string, Reconnect>>({});
   const [connecting, setConnecting] = useState(false);
   const [closing, setClosing] = useState<string | null>(null);
   const [error, setError] = useState("");
@@ -109,6 +119,86 @@ export default function App() {
     setActivity((current) => ({ ...current, [id]: next }));
   }, []);
 
+  function clearReconnect(id: string) {
+    setReconnects((current) => {
+      const next = { ...current };
+      delete next[id];
+      return next;
+    });
+  }
+  function attachSession(id: string, session: Session) {
+    setScratch((current) => {
+      const tabs = draftsFrom(current);
+      const details = {
+        name: session.name,
+        color: session.color ?? undefined,
+        profileId: session.profileId,
+        disconnected: false,
+      };
+      return tabs.some((tab) => tab.id === id)
+        ? tabs.map((tab) => (tab.id === id ? { ...tab, ...details } : tab))
+        : [...tabs, { id, sql: "", ...details }];
+    });
+    setSessions((current) => ({ ...current, [id]: session }));
+    clearReconnect(id);
+  }
+  async function reconnect(draft: Draft) {
+    setReconnects((current) => ({
+      ...current,
+      [draft.id]: { pending: true, error: "" },
+    }));
+    try {
+      const connected = await request<Session>(
+        `/profiles/${draft.profileId}/connect`,
+        {},
+      );
+      attachSession(draft.id, {
+        ...connected,
+        color: connected.color ?? draft.color ?? null,
+      });
+    } catch (error) {
+      setReconnects((current) => ({
+        ...current,
+        [draft.id]: { pending: false, error: (error as Error).message },
+      }));
+    }
+  }
+  // Tabs are saved across restarts, so their saved connections come back with them.
+  const restoring = useRef(false);
+  useEffect(() => {
+    if (!ready || restoring.current) return;
+    restoring.current = true;
+    const tabs = drafts.filter((tab) => tab.profileId && !tab.disconnected);
+    if (!tabs.length) return;
+    setReconnects(
+      Object.fromEntries(
+        tabs.map((tab) => [tab.id, { pending: true, error: "" }]),
+      ),
+    );
+    request<ConnectionProfile[]>("/profiles").then(
+      (profiles) => {
+        for (const tab of tabs) {
+          const profile = profiles.find((item) => item.id === tab.profileId);
+          // Entra sign-in opens a browser window, so it waits for a click.
+          if (profile?.connection.authentication === "entra")
+            clearReconnect(tab.id);
+          else void reconnect(tab);
+        }
+      },
+      (error: Error) => {
+        setReconnects(
+          Object.fromEntries(
+            tabs.map((tab) => [
+              tab.id,
+              { pending: false, error: error.message },
+            ]),
+          ),
+        );
+      },
+    );
+    // Only the tabs loaded at startup are restored; later tabs connect explicitly.
+  }, [ready]);
+
   async function connect(
     connection: Connection | string,
     preferredColor?: string,
@@ -126,24 +216,27 @@ export default function App() {
           preferredColor ??
           nextConnectionColor(drafts.map((draft) => draft.color)),
       };
-      const id = sessions[active.id] ? crypto.randomUUID() : active.id;
-      setScratch((current) => {
-        const tabs = draftsFrom(current);
-        const name = session.name;
-        const color = session.color;
-        const profileId = session.profileId;
-        return id === active.id
-          ? tabs.map((tab) =>
-              tab.id === id ? { ...tab, name, color, profileId } : tab,
-            )
-          : [...tabs, { id, name, color, profileId, sql: "" }];
-      });
-      setSessions((current) => ({ ...current, [id]: session }));
+      // Only the untouched starting tab is filled; anything else keeps its tab.
+      const blank =
+        active.name === blankTabName &&
+        !sessions[active.id] &&
+        !active.profileId &&
+        !active.sql.trim();
+      const id =
+        connectionDialog?.target ?? (blank ? active.id : crypto.randomUUID());
+      attachSession(id, session);
       setActiveId(id);
-      setConnectionOpen(false);
+      setConnectionDialog(null);
     } finally {
       setConnecting(false);
     }
+  }
+  function connectTab(draft: Draft) {
+    // A second attempt could finish after, and overwrite, a connection chosen later.
+    if (reconnects[draft.id]?.pending) return;
+    if (sessions[draft.id]) setConnectionDialog({ target: null });
+    else if (draft.profileId) void reconnect(draft);
+    else setConnectionDialog({ target: draft.id });
   }
   function updateProfile(profile: ConnectionProfile) {
     if (drafts.some((draft) => draft.profileId === profile.id))
@@ -165,18 +258,31 @@ export default function App() {
       ),
     );
   }
+  const keptSql = useRef(new Map<string, string>());
   async function closeWorkspace(draft: Draft) {
-    if (activity[draft.id]?.busy || closing) return;
+    if (activity[draft.id]?.busy || reconnects[draft.id]?.pending || closing)
+      return;
+    // Staged cell edits are not SQL text, so they cannot be kept in temp_queries.
     if (
-      (draft.sql.trim() || activity[draft.id]?.edits) &&
+      activity[draft.id]?.edits &&
       !window.confirm(
-        `Close ${draft.name}? Its SQL draft and staged cell edits will be discarded. Saved queries are kept.`,
+        `Close ${draft.name}? Its staged cell edits will be discarded.`,
       )
     )
       return;
     setClosing(draft.id);
     setError("");
     try {
+      const keepSql =
+        draft.sql.trim() &&
+        !library.queries.some((query) => query.sql === draft.sql);
+      // Save first: if this fails the tab stays open with its text.
+      if (keepSql && keptSql.current.get(draft.id) !== draft.sql) {
+        await request("/temp-queries", { name: draft.name, sql: draft.sql });
+        // Retrying a close that failed later on must not save a second copy.
+        keptSql.current.set(draft.id, draft.sql);
+        void scriptFolders.refresh();
+      }
       const session = sessions[draft.id];
       if (session)
         await request(
@@ -191,7 +297,7 @@ export default function App() {
         );
         return remaining.length
           ? remaining
-          : [{ id: crypto.randomUUID(), name: "Workspace", sql: "" }];
+          : [{ id: crypto.randomUUID(), name: blankTabName, sql: "" }];
       });
       setSessions((current) => {
         const next = { ...current };
@@ -203,6 +309,8 @@ export default function App() {
         delete next[draft.id];
         return next;
       });
+      clearReconnect(draft.id);
+      keptSql.current.delete(draft.id);
     } catch (error) {
       setError(`Could not close workspace: ${(error as Error).message}`);
     } finally {
@@ -287,7 +395,11 @@ export default function App() {
                 <button
                   className="icon-button"
                   aria-label={`Close workspace ${draft.name}`}
-                  disabled={!!activity[draft.id]?.busy || !!closing}
+                  disabled={
+                    !!activity[draft.id]?.busy ||
+                    !!reconnects[draft.id]?.pending ||
+                    !!closing
+                  }
                   onClick={() => void closeWorkspace(draft)}
                 >
                   <X size={13} />
@@ -297,7 +409,7 @@ export default function App() {
           </div>
           <button
             className="add-connection"
-            onClick={() => setConnectionOpen(true)}
+            onClick={() => setConnectionDialog({ target: null })}
             disabled={connecting || !!closing}
           >
             <Plus size={15} /> Add connection
@@ -322,10 +434,17 @@ export default function App() {
           key={draft.id}
           id={draft.id}
           active={active.id === draft.id}
+          closing={closing === draft.id}
           session={sessions[draft.id] ?? null}
-          onSession={(session) =>
-            setSessions((current) => ({ ...current, [draft.id]: session }))
-          }
+          onSession={(session) => {
+            setSessions((current) => ({ ...current, [draft.id]: session }));
+            if (!session)
+              setScratch((current) =>
+                draftsFrom(current).map((tab) =>
+                  tab.id === draft.id ? { ...tab, disconnected: true } : tab,
+                ),
+              );
+          }}
           sql={draft.sql}
           setSql={(sql) =>
             setScratch((current) =>
@@ -337,18 +456,22 @@ export default function App() {
           scriptFolders={scriptFolders}
           library={library}
           setLibrary={setLibrary}
-          onConnect={() => setConnectionOpen(true)}
+          savedConnection={draft.profileId ? draft.name : null}
+          reconnecting={!!reconnects[draft.id]?.pending}
+          reconnectError={reconnects[draft.id]?.error ?? ""}
+          onConnect={() => connectTab(draft)}
+          onChooseConnection={() => setConnectionDialog({ target: draft.id })}
           onActivity={reportActivity}
         />
       ))}
-      {connectionOpen && (
+      {connectionDialog && (
         <ConnectionDialog
           busy={connecting}
           onConnect={connect}
           usedColors={drafts.map((draft) => draft.color)}
           onProfileSaved={updateProfile}
           onClose={() => {
-            if (!connecting) setConnectionOpen(false);
+            if (!connecting) setConnectionDialog(null);
           }}
         />
       )}

@@ -76,12 +76,10 @@ try {
     .getByRole("dialog")
     .getByRole("button", { name: "Save query", exact: true })
     .click();
-  await page.waitForFunction(
-    () => !window.exqlPendingWrites && !window.exqlDirty,
-  );
+  // Quitting right after a change waits for the save instead of prompting.
   await context.tracing.stop({ path: join(root, "before-restart-trace.zip") });
   tracing = false;
-  closeDesktop(root);
+  closeDesktop(root, { requireCleanExit: true });
   await expect.poll(() => page.isClosed()).toBe(true);
 
   attached = await launchDesktop(root, 9223);
@@ -93,12 +91,9 @@ try {
     sources: true,
   });
   tracing = true;
-  await page
-    .getByRole("button", { name: "Add connection", exact: true })
-    .click();
-  await page
-    .getByRole("button", { name: "Connect to Portable journey", exact: true })
-    .click();
+  // The saved connection's tab reconnects by itself after a real restart.
+  await expect(page.getByRole("tab")).toHaveCount(1);
+  await expect(page.getByRole("tab")).toContainText("Portable journey");
   await expect(page.getByText("Connected", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "SQL scripts", exact: true }).click();
   const addFolder = page.getByRole("button", {
