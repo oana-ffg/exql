@@ -112,6 +112,7 @@ export function resultsText(
   results: { rowCount: number; csv: string }[],
   recordsAffected: number,
   messages: string[],
+  error: string | null = null,
 ): string {
   return [
     ...results.map(
@@ -123,5 +124,6 @@ export function resultsText(
       ? [`Messages\n${fenced(messages.join("\n"), "text")}`]
       : []),
     ...(recordsAffected >= 0 ? [`${recordsAffected} rows affected`] : []),
+    ...(error ? [`Error\n${fenced(error, "text")}`] : []),
   ].join("\n\n");
 }

@@ -301,7 +301,8 @@ export function Workspace({
     setQueryData(response.results[0]?.page ?? null);
     setQueryOffset(0);
     setGeneration((value) => value + 1);
-    if (!response.results.length)
+    if (response.error) setError(response.error);
+    else if (!response.results.length)
       setNotice(
         `Query completed. ${Math.max(0, response.recordsAffected)} rows affected.`,
       );
@@ -342,7 +343,12 @@ export function Workspace({
           ),
         });
       await copyText(
-        resultsText(results, response.recordsAffected, response.messages),
+        resultsText(
+          results,
+          response.recordsAffected,
+          response.messages,
+          response.error,
+        ),
         setNotice,
         `Copied ${results.length} ${results.length === 1 ? "result" : "results"} as text.`,
       );

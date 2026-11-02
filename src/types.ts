@@ -70,6 +70,7 @@ export interface QueryResponse {
   results: QueryResult[];
   recordsAffected: number;
   messages: string[];
+  error: string | null;
 }
 export interface SavedQuery {
   id: string;

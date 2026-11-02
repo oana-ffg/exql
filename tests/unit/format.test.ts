@@ -117,6 +117,23 @@ describe("copy all results as text", () => {
       'Result 1 of 1 · 0 rows\n```csv\n"a"\n```',
     );
   });
+  test("labels a partial failure alongside results, messages and affected rows", () => {
+    expect(
+      resultsText(
+        [{ rowCount: 1, csv: '"n"\r\n"1"\r\n' }],
+        0,
+        ["before failure"],
+        "Stopped at batch 2: ```SQL failed```",
+      ),
+    ).toBe(
+      'Result 1 of 1 · 1 row\n```csv\n"n"\r\n"1"\n```\n\n' +
+        "Messages\n```text\nbefore failure\n```\n\n0 rows affected\n\n" +
+        "Error\n````text\nStopped at batch 2: ```SQL failed```\n````",
+    );
+    expect(resultsText([], -1, ["printed"], "Plain SQL error")).toBe(
+      "Messages\n```text\nprinted\n```\n\nError\n```text\nPlain SQL error\n```",
+    );
+  });
 });
 test("handles results with very many separate backtick runs", () => {
   const csv = '"a"\n' + "`,".repeat(200_000) + "````";

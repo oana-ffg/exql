@@ -484,26 +484,39 @@ SELECT Message FROM dbo.CommandLog WHERE Id=1;`);
   ]);
 });
 
-test("GO failure identifies the script line, stops later batches and preserves earlier commits and snapshots", async () => {
+test("GO failure identifies the script line, stops later batches and keeps completed results and messages", async () => {
   const previous = await query("SELECT 99 AS PreviousResult;");
   const response = await api.post(url("/query"), {
     data: {
-      sql: "INSERT dbo.CommandLog VALUES(1,N'before error');\r\nSELECT 1 AS PendingResult;\r\nGO\r\n\r\nTHROW 50000, 'GO journey error', 1;\r\nGO\r\nINSERT dbo.CommandLog VALUES(2,N'after error');",
+      sql: "INSERT dbo.CommandLog VALUES(1,N'before error'); PRINT 'before failure';\r\nSELECT Id FROM dbo.WorkItems ORDER BY Id;\r\nGO\r\n\r\nTHROW 50000, 'GO journey error', 1;\r\nGO\r\nINSERT dbo.CommandLog VALUES(2,N'after error');",
     },
   });
-  expect(response.status()).toBe(400);
-  const { error } = await response.json();
+  expect(response.status()).toBe(200);
+  const { error, results, messages, recordsAffected }: QueryResponse =
+    await response.json();
   expect(error).toBe(
     "Stopped at batch 2 of 3, script line 5. Any changes committed before the error remain. SQL Server error: GO journey error",
   );
   expect(await rows(databaseName, "SELECT * FROM dbo.CommandLog")).toEqual([
     { Id: 1, Message: "before error" },
   ]);
-  const preserved = await api.get(
+  expect(messages).toEqual(["before failure"]);
+  expect(recordsAffected).toBe(1);
+  expect(results).toHaveLength(1);
+  expect(results[0].rowCount).toBe(245);
+  expect(results[0].page.rows[0]).toEqual(["1"]);
+  const nextPage = await api.get(url(`/results/${results[0].id}?offset=200`));
+  expect(nextPage.ok(), await nextPage.text()).toBe(true);
+  expect((await nextPage.json()).rows).toHaveLength(45);
+  const exported = await api.post(url("/export"), {
+    data: { resultId: results[0].id, format: "json" },
+  });
+  expect(exported.ok(), await exported.text()).toBe(true);
+  expect(await exported.json()).toHaveLength(245);
+  const expired = await api.get(
     url(`/results/${previous.results[0].id}?offset=0`),
   );
-  expect(preserved.ok(), await preserved.text()).toBe(true);
-  expect((await preserved.json()).rows).toEqual([["99"]]);
+  expect(expired.status()).toBe(404);
 });
 
 test("GO validates every count before running any batch and rejects separator-only scripts", async () => {
@@ -528,13 +541,19 @@ test("result set limits apply across GO batches and repetitions", async () => {
   const thirty = await query("SELECT 1 AS Value;\nGO 30");
   expect(thirty.results).toHaveLength(30);
   expect(thirty.recordsAffected).toBe(-1);
+  expect(thirty.error).toBeNull();
   for (const sql of [
     "SELECT 1;\nGO 31",
     "SELECT 1;\nGO 20\nSELECT 2;\nGO 11",
   ]) {
     const response = await api.post(url("/query"), { data: { sql } });
-    expect(response.status()).toBe(400);
-    expect((await response.json()).error).toContain("at most 30 result sets");
+    expect(response.status()).toBe(200);
+    const partial: QueryResponse = await response.json();
+    expect(partial.error).toContain("at most 30 result sets");
+    expect(partial.results).toHaveLength(30);
+    expect(partial.results[29].page.rows).toEqual([
+      [sql.includes("SELECT 2") ? "2" : "1"],
+    ]);
   }
 });
 
@@ -544,7 +563,7 @@ test("a failed GO repetition stops further repetitions and batches", async () =>
       sql: "SELECT 1;\nGO\nINSERT dbo.CommandLog VALUES(1,N'first repetition');\nGO 3\nINSERT dbo.CommandLog VALUES(2,N'must not run');",
     },
   });
-  expect(response.status()).toBe(400);
+  expect(response.status()).toBe(200);
   const { error } = await response.json();
   expect(error).toContain(
     "Stopped at batch 2 of 3 (execution 2 of 3), script line 3.",
@@ -559,7 +578,7 @@ test("a failed repetition of a lone batch reports the execution", async () => {
   const response = await api.post(url("/query"), {
     data: { sql: "INSERT dbo.CommandLog VALUES(1,N'first run');\nGO 3" },
   });
-  expect(response.status()).toBe(400);
+  expect(response.status()).toBe(200);
   const { error } = await response.json();
   expect(error).toContain(
     "Stopped at batch 1 of 1 (execution 2 of 3), script line 1.",
@@ -576,22 +595,76 @@ test("an error inside a procedure reports the procedure line, not a script line"
       sql: "CREATE PROCEDURE dbo.GoFails AS\nSELECT 1;\nSELECT 2;\nTHROW 50000, 'inside procedure', 1;\nGO\nEXEC dbo.GoFails;",
     },
   });
-  expect(response.status()).toBe(400);
+  expect(response.status()).toBe(200);
   expect((await response.json()).error).toBe(
     "Stopped at batch 2 of 2, starting on script line 6, at line 4 of dbo.GoFails. Any changes committed before the error remain. SQL Server error: inside procedure",
   );
 });
 
 test("single batch SQL errors remain plain and zero affected rows remain visible", async () => {
+  const previous = await query("SELECT 99 AS PreviousResult;");
   const response = await api.post(url("/query"), {
     data: { sql: "THROW 50000, 'Plain SQL error', 1;" },
   });
   expect(response.status()).toBe(400);
   expect(await response.json()).toEqual({ error: "Plain SQL error" });
+  const preserved = await api.get(
+    url(`/results/${previous.results[0].id}?offset=0`),
+  );
+  expect(preserved.ok(), await preserved.text()).toBe(true);
+  expect((await preserved.json()).rows).toEqual([["99"]]);
   const result = await query(
     "SELECT 1;\nGO\nUPDATE dbo.CommandLog SET Message=N'no match' WHERE Id=1;\nGO\nSELECT 2;",
   );
   expect(result.recordsAffected).toBe(0);
+});
+
+test("a single batch keeps completed results with the plain SQL error", async () => {
+  for (const select of ["SELECT 1 AS Value", "SELECT 1 AS Value WHERE 1=0"]) {
+    const response = await query(
+      `${select}; THROW 50000, 'Single batch error', 1;`,
+    );
+    expect(response.error).toBe("Single batch error");
+    expect(response.results).toHaveLength(1);
+    expect(response.results[0].page.rows).toEqual(
+      select.includes("WHERE") ? [] : [["1"]],
+    );
+  }
+});
+
+test("an error while reading a result discards that incomplete result", async () => {
+  const response = await query(
+    "SELECT 7 AS Complete; SELECT 1/(245-Id) AS Incomplete FROM dbo.WorkItems;",
+  );
+  expect(response.error).toContain("Divide by zero");
+  expect(response.results).toHaveLength(1);
+  expect(response.results[0].page.rows).toEqual([["7"]]);
+  const stored = await api.get(
+    url(`/results/${response.results[0].id}?offset=0`),
+  );
+  expect(stored.ok(), await stored.text()).toBe(true);
+  expect((await stored.json()).rows).toEqual([["7"]]);
+});
+
+test("messages and zero affected rows each qualify as partial output", async () => {
+  const printed = await query(
+    "PRINT 'before error'; THROW 50000, 'Print error', 1;",
+  );
+  expect(printed.results).toEqual([]);
+  expect(printed.messages).toEqual(["before error"]);
+  expect(printed.error).toBe("Print error");
+  const updated = await query(
+    "UPDATE dbo.CommandLog SET Message=N'no match' WHERE Id=1;\nGO\nTHROW 50000, 'Update error', 1;",
+  );
+  expect(updated.results).toEqual([]);
+  expect(updated.recordsAffected).toBe(0);
+  expect(updated.error).toContain("Update error");
+  const sameBatch = await query(
+    "UPDATE dbo.CommandLog SET Message=N'no match' WHERE Id=1; SELECT 1 AS Value; THROW 50000, 'Same batch update error', 1;",
+  );
+  expect(sameBatch.recordsAffected).toBe(0);
+  expect(sameBatch.results[0].page.rows).toEqual([["1"]]);
+  expect(sameBatch.error).toBe("Same batch update error");
 });
 
 test("filtered table exports and query snapshots match independent SQL across pages", async () => {
