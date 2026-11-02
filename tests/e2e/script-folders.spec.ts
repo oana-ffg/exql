@@ -97,8 +97,20 @@ test("linked scripts read current disk content, protect edits, run and unlink wi
         response.request().method() === "POST" &&
         response.ok(),
     );
+    // Close and update restart must wait for an unfinished add.
+    let releaseAdd!: () => void;
+    const addHeld = new Promise<void>((resolve) => (releaseAdd = resolve));
+    const addRoute = "**/api/script-folders";
+    await page.route(addRoute, async (route) => {
+      if (route.request().method() === "POST") await addHeld;
+      await route.continue();
+    });
     await addFolder.click();
+    await expect.poll(() => page.evaluate(() => window.exqlDirty)).toBe(true);
+    releaseAdd();
     folderId = (await (await added).json()).id;
+    await page.unroute(addRoute);
+    await expect.poll(() => page.evaluate(() => window.exqlDirty)).toBe(false);
     const folder = panel.locator(".linked-folder").filter({
       has: page.locator(`summary[title=${JSON.stringify(directory)}]`),
     });

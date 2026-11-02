@@ -83,6 +83,7 @@ export default function App() {
   const dirty =
     connecting ||
     !!closing ||
+    scriptFolders.adding ||
     Object.values(activity).some((item) => item.busy || item.edits);
 
   useLayoutEffect(() => {

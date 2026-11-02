@@ -115,6 +115,9 @@ try {
   await addFolder.click();
   answerFolderPicker(root, scripts);
   await expect(
+    page.locator(`.linked-folder summary[title=${JSON.stringify(scripts)}]`),
+  ).toBeVisible();
+  await expect(
     page.getByRole("button", { name: /^picked\.sql/ }),
   ).toBeVisible();
   await page
