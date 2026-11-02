@@ -74,6 +74,10 @@ internal static class Program
             checkingClose = true;
             try
             {
+                // A save still in flight finishes by itself, so it is no reason to ask.
+                var saveDeadline = DateTime.UtcNow.AddSeconds(5);
+                while (DateTime.UtcNow < saveDeadline && await web.CoreWebView2.ExecuteScriptAsync("Boolean(window.exqlPendingWrites)") == "true")
+                    await Task.Delay(50);
                 var dirty = await web.CoreWebView2.ExecuteScriptAsync("Boolean(window.exqlDirty || window.exqlPendingWrites || window.exqlStorageFailed)");
                 if (dirty == "true" && MessageBox.Show(window, "There are unsaved edits, pending or failed saves, or an operation in progress. Close ExQL anyway?", "Close ExQL", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
                 closing = true;

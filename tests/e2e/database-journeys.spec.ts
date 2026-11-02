@@ -616,10 +616,8 @@ for (const mode of ["sql", "connectionString"] as const) {
       .getByRole("button", { name: "Disconnect", exact: true })
       .click();
     await page
-      .getByRole("button", { name: "Add connection", exact: true })
-      .click();
-    await page
-      .getByRole("button", { name: `Connect to ${name}`, exact: true })
+      .getByRole("tabpanel")
+      .getByRole("button", { name: `Reconnect to ${name}`, exact: true })
       .click();
     const response = await runSql(
       page,

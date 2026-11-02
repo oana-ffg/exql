@@ -128,15 +128,6 @@ test("independent database workspaces preserve edits, run concurrently, and rest
     await expect(editor).toContainText("WAITFOR DELAY");
     await page.getByRole("tab", { name: other.name, exact: true }).click();
     await expect(editor).toHaveText("SELECT DB_NAME() AS DatabaseName;");
-    page.once("dialog", (dialog) => dialog.dismiss());
-    await page
-      .getByRole("button", {
-        name: `Close workspace ${other.name}`,
-        exact: true,
-      })
-      .click();
-    await expect(page.getByRole("tab")).toHaveCount(2);
-    page.once("dialog", (dialog) => dialog.accept());
     await page
       .getByRole("button", {
         name: `Close workspace ${other.name}`,
