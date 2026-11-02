@@ -85,7 +85,7 @@ export async function launchDesktop(root, port, extra = []) {
   return attachDesktop(port);
 }
 
-export function closeDesktop(root) {
+export function closeDesktop(root, { requireCleanExit = false } = {}) {
   execFileSync(
     "powershell.exe",
     [
@@ -98,6 +98,7 @@ export function closeDesktop(root) {
       ),
       "-Executable",
       resolve(root, "app", "current", "ExQL.exe"),
+      ...(requireCleanExit ? ["-RequireCleanExit"] : []),
     ],
     { windowsHide: true, stdio: "inherit" },
   );

@@ -76,11 +76,10 @@ try {
     .getByRole("dialog")
     .getByRole("button", { name: "Save query", exact: true })
     .click();
-  // Quitting right after a change waits for the save instead of prompting;
-  // a prompt would leave the window open and fail the poll below.
+  // Quitting right after a change waits for the save instead of prompting.
   await context.tracing.stop({ path: join(root, "before-restart-trace.zip") });
   tracing = false;
-  closeDesktop(root);
+  closeDesktop(root, { requireCleanExit: true });
   await expect.poll(() => page.isClosed()).toBe(true);
 
   attached = await launchDesktop(root, 9223);
