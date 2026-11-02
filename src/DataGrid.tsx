@@ -1,4 +1,5 @@
 import {
+  memo,
   useMemo,
   useState,
   type ClipboardEvent,
@@ -22,7 +23,7 @@ type GridMenu =
   | { kind: "cell"; position: Position }
   | { kind: "row"; row: number }
   | { kind: "column"; col: number };
-export function DataGrid({
+export const DataGrid = memo(function DataGrid({
   data,
   table,
   edits,
@@ -535,7 +536,7 @@ export function DataGrid({
       )}
     </div>
   );
-}
+});
 
 function CellEditor({
   column,

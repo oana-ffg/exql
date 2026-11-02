@@ -84,11 +84,8 @@ export function useScriptFolders(onError: (message: string) => void) {
   }, [onError]);
   useEffect(() => {
     void refresh();
-    const focus = () => void refresh();
-    window.addEventListener("focus", focus);
     return () => {
       controller.current?.abort();
-      window.removeEventListener("focus", focus);
     };
   }, [refresh]);
 
