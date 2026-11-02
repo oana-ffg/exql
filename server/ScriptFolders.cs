@@ -49,9 +49,8 @@ public sealed class ScriptFolders(AppPaths paths)
     public ScriptFolder Add(string input)
     {
         if (string.IsNullOrWhiteSpace(input)) throw new InputException("Folder path is required.");
-        var expanded = Environment.ExpandEnvironmentVariables(input.Trim().Trim('"').Trim());
-        if (!Path.IsPathFullyQualified(expanded)) throw new InputException("Enter a fully qualified folder path.");
-        var root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(expanded));
+        if (!Path.IsPathFullyQualified(input)) throw new InputException("Enter a fully qualified folder path.");
+        var root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(input));
         if (!Directory.Exists(root)) throw new InputException($"Script folder does not exist or is inaccessible: {root}");
         lock (gate) return Access(path, () =>
         {

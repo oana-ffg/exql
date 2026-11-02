@@ -10,6 +10,7 @@ import {
   runSql,
 } from "../tests/support/ui.ts";
 import {
+  answerFolderPicker,
   launchDesktop,
   closeDesktop,
   deleteDesktopProfiles,
@@ -100,6 +101,25 @@ try {
     .click();
   await expect(page.getByText("Connected", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "SQL scripts", exact: true }).click();
+  const addFolder = page.getByRole("button", {
+    name: "Add script folder",
+    exact: true,
+  });
+  await addFolder.click();
+  answerFolderPicker(root);
+  await expect(addFolder).toBeEnabled();
+  await expect(page.locator(".linked-folder")).toHaveCount(0);
+  const scripts = join(root, "picked-scripts");
+  await mkdir(scripts);
+  await writeFile(join(scripts, "picked.sql"), "SELECT 1;");
+  await addFolder.click();
+  answerFolderPicker(root, scripts);
+  await expect(
+    page.locator(`.linked-folder summary[title=${JSON.stringify(scripts)}]`),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: /^picked\.sql/ }),
+  ).toBeVisible();
   await page
     .getByRole("button", { name: "Portable saved query", exact: true })
     .click();
@@ -150,7 +170,7 @@ try {
   await page.screenshot({ path: join(root, "desktop-complete.png") });
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: portable native API isolation, connect, committed grid edit, SQL mutation, saved query, restart, profile reconnect, pagination and native download; independent DB assertions.",
+    "PASS: portable native API isolation, connect, committed grid edit, SQL mutation, saved query, restart, profile reconnect, native folder picker, pagination and native download; independent DB assertions.",
   );
 } catch (error) {
   await writeFile(join(root, "failure.txt"), error.stack ?? String(error));

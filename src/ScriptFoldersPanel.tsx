@@ -1,8 +1,7 @@
-import { useState } from "react";
 import { FileCode2, Folder, FolderPlus, Play, RefreshCw } from "lucide-react";
 import { ContextMenu, useContextMenu } from "./ContextMenu";
-import { Modal } from "./Modal";
 import { copyText } from "./clipboard";
+import { canPickFolder } from "./desktopBridge";
 import {
   scriptFullPath,
   type ScriptFile,
@@ -40,10 +39,7 @@ export function ScriptFoldersPanel({
   onOpen: (script: OpenScript, run?: boolean) => void;
   onNotice: (message: string) => void;
 }) {
-  const [adding, setAdding] = useState(false);
-  const [path, setPath] = useState("");
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState("");
+  const picker = canPickFolder();
   const context = useContextMenu<Target>();
   function open(folder: ScriptFolder, file: ScriptFile, run = false) {
     onOpen(
@@ -120,12 +116,13 @@ export function ScriptFoldersPanel({
           <button
             className="icon-button"
             aria-label="Add script folder"
-            title="Add script folder"
-            onClick={() => {
-              setAdding(true);
-              setPath("");
-              setError("");
-            }}
+            title={
+              picker
+                ? "Add script folder"
+                : "Adding a script folder requires the ExQL desktop app"
+            }
+            disabled={!picker || state.adding}
+            onClick={() => void state.addFromPicker()}
           >
             <FolderPlus size={15} />
           </button>
@@ -223,63 +220,6 @@ export function ScriptFoldersPanel({
                 ]
           }
         />
-      )}
-      {adding && (
-        <Modal
-          title="Add script folder"
-          onClose={() => {
-            if (!pending) setAdding(false);
-          }}
-        >
-          <form
-            onSubmit={async (event) => {
-              event.preventDefault();
-              setPending(true);
-              setError("");
-              try {
-                await state.add(path);
-                setAdding(false);
-              } catch (error) {
-                setError((error as Error).message);
-              } finally {
-                setPending(false);
-              }
-            }}
-          >
-            <label>
-              Folder path
-              <input
-                autoFocus
-                required
-                value={path}
-                disabled={pending}
-                onChange={(event) => setPath(event.target.value)}
-              />
-            </label>
-            <p className="hint">
-              Paste a folder path from File Explorer. Environment variables such
-              as %USERPROFILE%\Downloads work. ExQL only reads .sql files; it
-              never copies or changes them.
-            </p>
-            {error && (
-              <p className="form-error" role="alert">
-                {error}
-              </p>
-            )}
-            <footer className="modal-footer">
-              <button
-                type="button"
-                disabled={pending}
-                onClick={() => setAdding(false)}
-              >
-                Cancel
-              </button>
-              <button className="primary" disabled={pending || !path.trim()}>
-                Add folder
-              </button>
-            </footer>
-          </form>
-        </Modal>
       )}
     </>
   );

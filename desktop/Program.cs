@@ -7,6 +7,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.Wpf;
+using Microsoft.Win32;
 using Velopack;
 
 namespace Exql.Desktop;
@@ -47,10 +48,22 @@ internal static class Program
         var webReady = false;
         var updateTimer = new DispatcherTimer { Interval = TimeSpan.FromHours(6) };
         updateTimer.Tick += async (_, _) => await updates.CheckAsync();
+        void SendToPage(object message) =>
+            web.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(message, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
         void SendUpdateState()
         {
-            if (webReady && !closing)
-                web.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(new { type = "updates", state = updates.State }, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+            if (webReady && !closing) SendToPage(new { type = "updates", state = updates.State });
+        }
+        void PickFolder()
+        {
+            string? path = null, error = null;
+            try
+            {
+                var dialog = new OpenFolderDialog { Title = "Add script folder" };
+                if (dialog.ShowDialog(window) == true) path = dialog.FolderName;
+            }
+            catch (Exception failure) { error = $"Could not open the folder picker: {failure.Message}"; }
+            if (!closing) SendToPage(new { type = "folder-picked", path, error });
         }
         updates.Changed += SendUpdateState;
         window.Closing += async (_, eventArgs) =>
@@ -92,11 +105,13 @@ internal static class Program
                 web.CoreWebView2.WebMessageReceived += async (_, eventArgs) =>
                 {
                     if (closing || !eventArgs.Source.StartsWith(origin + "/", StringComparison.Ordinal)) return;
-                    if (eventArgs.WebMessageAsJson is not ("\"updates.status\"" or "\"updates.check\"" or "\"updates.restart\"")) return;
+                    if (eventArgs.WebMessageAsJson is not ("\"updates.status\"" or "\"updates.check\"" or "\"updates.restart\"" or "\"folders.pick\"")) return;
                     switch (eventArgs.TryGetWebMessageAsString())
                     {
                         case "updates.status": webReady = true; SendUpdateState(); break;
                         case "updates.check": await updates.CheckAsync(); break;
+                        // WebView2 holds back its events during a nested message loop in a handler, so the modal dialog opens after this handler returns.
+                        case "folders.pick": _ = window.Dispatcher.InvokeAsync(PickFolder); break;
                         case "updates.restart":
                             if (updates.State.Status != "ready" || checkingClose) return;
                             checkingClose = true;

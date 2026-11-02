@@ -103,6 +103,26 @@ export function closeDesktop(root) {
   );
 }
 
+// Answers the real native folder dialog. Omit the folder to cancel it.
+export function answerFolderPicker(root, folder) {
+  execFileSync(
+    "powershell.exe",
+    [
+      "-NoProfile",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-File",
+      fileURLToPath(
+        new URL("../tests/support/answer-folder-picker.ps1", import.meta.url),
+      ),
+      "-Executable",
+      resolve(root, "app", "current", "ExQL.exe"),
+      ...(folder ? ["-Folder", folder] : []),
+    ],
+    { windowsHide: true, stdio: "inherit" },
+  );
+}
+
 export async function deleteDesktopProfiles(page) {
   if (!page || page.isClosed())
     throw new Error(
