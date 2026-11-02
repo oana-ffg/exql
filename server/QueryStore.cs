@@ -11,31 +11,51 @@ public static class QueryStore
     public const long MaxBytes = 256 * 1024 * 1024;
     public static async Task<QueryResponse> Run(DatabaseSession session, SqlConnection connection, string sql, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(sql)) throw new InputException("Enter SQL to run.");
+        // A request that omits the text binds null despite the non-nullable model property.
+        List<SqlBatch> batches = string.IsNullOrWhiteSpace(sql) ? [] : SqlBatches.Split(sql);
+        if (batches.Count == 0) throw new InputException("Enter SQL to run.");
         List<string> messages = [];
-        connection.InfoMessage += (_, args) => { if (messages.Count < 200) messages.Add(args.Message); };
-        await using var command = new SqlCommand(sql, connection) { CommandTimeout = 120 };
+        void OnInfoMessage(object sender, SqlInfoMessageEventArgs args) { if (messages.Count < 200) messages.Add(args.Message); }
+        connection.InfoMessage += OnInfoMessage;
         Dictionary<string, StoredResult> pending = [];
         List<QueryResult> results = [];
         long bytes = 0;
+        long affected = -1;
         try
         {
-            await using var reader = await command.ExecuteReaderAsync(ct);
-            do
+            for (var batchIndex = 0; batchIndex < batches.Count; batchIndex++)
             {
-                if (reader.FieldCount == 0) continue;
-                if (results.Count >= 30) throw new InputException("A query can return at most 30 result sets. Split this batch into smaller queries.");
-                var columns = SqlValues.ResultColumns(reader);
-                var id = Guid.NewGuid().ToString("N");
-                var path = Path.Combine(Path.GetTempPath(), $"exql-{id}.jsonl");
-                pending[id] = new(path, columns, 0, []);
-                var snapshot = await Store(path, columns, ReadRows(reader, ct), MaxBytes - bytes, ct);
-                bytes += snapshot.Bytes;
-                pending[id] = snapshot.Result;
-                results.Add(new(id, columns, snapshot.Result.RowCount,
-                    new(columns, snapshot.Preview, snapshot.Result.RowCount > PageSize, snapshot.Result.RowCount)));
-            } while (await reader.NextResultAsync(ct));
-            var affected = reader.RecordsAffected;
+                var batch = batches[batchIndex];
+                await using var command = new SqlCommand(batch.Text, connection) { CommandTimeout = 120 };
+                for (var repetition = 0; repetition < batch.RepeatCount; repetition++)
+                {
+                    ct.ThrowIfCancellationRequested();
+                    try
+                    {
+                        await using var reader = await command.ExecuteReaderAsync(ct);
+                        do
+                        {
+                            if (reader.FieldCount == 0) continue;
+                            if (results.Count >= 30) throw new InputException("A query can return at most 30 result sets. Split this script into smaller queries. SQL already executed may have committed changes.");
+                            var columns = SqlValues.ResultColumns(reader);
+                            var id = Guid.NewGuid().ToString("N");
+                            var path = Path.Combine(Path.GetTempPath(), $"exql-{id}.jsonl");
+                            pending[id] = new(path, columns, 0, []);
+                            var snapshot = await Store(path, columns, ReadRows(reader, ct), MaxBytes - bytes, ct);
+                            bytes += snapshot.Bytes;
+                            pending[id] = snapshot.Result;
+                            results.Add(new(id, columns, snapshot.Result.RowCount,
+                                new(columns, snapshot.Preview, snapshot.Result.RowCount > PageSize, snapshot.Result.RowCount)));
+                        } while (await reader.NextResultAsync(ct));
+                        if (reader.RecordsAffected >= 0) affected = Math.Max(0, affected) + reader.RecordsAffected;
+                    }
+                    catch (SqlException error) when ((batches.Count > 1 || batch.RepeatCount > 1) && !ct.IsCancellationRequested)
+                    {
+                        var repeat = batch.RepeatCount > 1 ? $" (execution {repetition + 1} of {batch.RepeatCount})" : "";
+                        throw new InputException($"Stopped at batch {batchIndex + 1} of {batches.Count}{repeat}, {batch.ErrorLocation(error.LineNumber, error.Procedure)}. Any changes committed before the error remain. SQL Server error: {error.Message}", innerException: error);
+                    }
+                }
+            }
             session.ClearResults();
             foreach (var item in pending) session.Results.Add(item.Key, item.Value);
             return new(results, affected, messages);
@@ -45,6 +65,7 @@ public static class QueryStore
             foreach (var result in pending.Values) File.Delete(result.Path);
             throw;
         }
+        finally { connection.InfoMessage -= OnInfoMessage; }
     }
     internal static async Task<(StoredResult Result, List<string?[]> Preview, long Bytes)> Store(
         string path, List<Column> columns, IAsyncEnumerable<string?[]> rows, long maxBytes, CancellationToken ct)

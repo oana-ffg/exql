@@ -419,6 +419,181 @@ test("SQL batches commit INSERT, UPDATE, DELETE and preserve earlier commits aft
   ]);
 });
 
+test("GO permits CREATE PROCEDURE as the first statement in its batch", async () => {
+  const response = await query(
+    "SELECT 1 AS BeforeProcedure;\r\nGO\r\nCREATE PROCEDURE dbo.GoJourney AS SELECT 42 AS Answer;\r\nGO\r\nEXEC dbo.GoJourney;",
+  );
+  expect(response.results.map((result) => result.page.rows)).toEqual([
+    [["1"]],
+    [["42"]],
+  ]);
+  expect(response.recordsAffected).toBe(-1);
+  expect(
+    await rows(databaseName, "SELECT OBJECT_ID(N'dbo.GoJourney', N'P') AS Id"),
+  ).toEqual([{ Id: expect.any(Number) }]);
+});
+
+test("GO preserves temporary tables and SET options, repeats inserts and accumulates results and messages", async () => {
+  const response = await query(`SET NOCOUNT OFF;
+SET DATEFIRST 3;
+CREATE TABLE #GoJourney (Id int IDENTITY, Value int);
+PRINT 'created';
+GO
+INSERT #GoJourney (Value) VALUES (7);
+PRINT 'inserted';
+SELECT Id FROM #GoJourney ORDER BY Id;
+go 3 /* repeat the preceding batch */ -- three inserts
+SELECT COUNT(*) AS Total, @@DATEFIRST AS FirstDay FROM #GoJourney;
+PRINT 'finished';`);
+  expect(response.recordsAffected).toBe(3);
+  expect(response.results.map((result) => result.page.rows)).toEqual([
+    [["1"]],
+    [["1"], ["2"]],
+    [["1"], ["2"], ["3"]],
+    [["3", "3"]],
+  ]);
+  expect(response.messages).toEqual([
+    "created",
+    "inserted",
+    "inserted",
+    "inserted",
+    "finished",
+  ]);
+});
+
+test("GO preserves open transactions and USE on the same connection", async () => {
+  const response = await query(`BEGIN TRANSACTION;
+INSERT dbo.CommandLog VALUES (1,N'across batches');
+GO
+SELECT @@TRANCOUNT AS OpenTransactions;
+COMMIT;
+USE tempdb;
+GO
+SELECT DB_NAME() AS CurrentDatabase;
+USE [${databaseName}];
+GO
+SELECT Message FROM dbo.CommandLog WHERE Id=1;`);
+  expect(response.results.map((result) => result.page.rows)).toEqual([
+    [["1"]],
+    [["tempdb"]],
+    [["across batches"]],
+  ]);
+  expect(response.recordsAffected).toBe(1);
+  expect(await rows(databaseName, "SELECT * FROM dbo.CommandLog")).toEqual([
+    { Id: 1, Message: "across batches" },
+  ]);
+});
+
+test("GO failure identifies the script line, stops later batches and preserves earlier commits and snapshots", async () => {
+  const previous = await query("SELECT 99 AS PreviousResult;");
+  const response = await api.post(url("/query"), {
+    data: {
+      sql: "INSERT dbo.CommandLog VALUES(1,N'before error');\r\nSELECT 1 AS PendingResult;\r\nGO\r\n\r\nTHROW 50000, 'GO journey error', 1;\r\nGO\r\nINSERT dbo.CommandLog VALUES(2,N'after error');",
+    },
+  });
+  expect(response.status()).toBe(400);
+  const { error } = await response.json();
+  expect(error).toBe(
+    "Stopped at batch 2 of 3, script line 5. Any changes committed before the error remain. SQL Server error: GO journey error",
+  );
+  expect(await rows(databaseName, "SELECT * FROM dbo.CommandLog")).toEqual([
+    { Id: 1, Message: "before error" },
+  ]);
+  const preserved = await api.get(
+    url(`/results/${previous.results[0].id}?offset=0`),
+  );
+  expect(preserved.ok(), await preserved.text()).toBe(true);
+  expect((await preserved.json()).rows).toEqual([["99"]]);
+});
+
+test("GO validates every count before running any batch and rejects separator-only scripts", async () => {
+  for (const count of ["0", "2147483648"]) {
+    const response = await api.post(url("/query"), {
+      data: {
+        sql: `INSERT dbo.CommandLog VALUES(1,N'must not run');\nGO\nSELECT 1;\nGO ${count}`,
+      },
+    });
+    expect(response.status()).toBe(400);
+    expect((await response.json()).error).toContain("GO count on line 4");
+    expect(await rows(databaseName, "SELECT * FROM dbo.CommandLog")).toEqual(
+      [],
+    );
+  }
+  const empty = await api.post(url("/query"), { data: { sql: "GO" } });
+  expect(empty.status()).toBe(400);
+  expect(await empty.json()).toEqual({ error: "Enter SQL to run." });
+});
+
+test("result set limits apply across GO batches and repetitions", async () => {
+  const thirty = await query("SELECT 1 AS Value;\nGO 30");
+  expect(thirty.results).toHaveLength(30);
+  expect(thirty.recordsAffected).toBe(-1);
+  for (const sql of [
+    "SELECT 1;\nGO 31",
+    "SELECT 1;\nGO 20\nSELECT 2;\nGO 11",
+  ]) {
+    const response = await api.post(url("/query"), { data: { sql } });
+    expect(response.status()).toBe(400);
+    expect((await response.json()).error).toContain("at most 30 result sets");
+  }
+});
+
+test("a failed GO repetition stops further repetitions and batches", async () => {
+  const response = await api.post(url("/query"), {
+    data: {
+      sql: "SELECT 1;\nGO\nINSERT dbo.CommandLog VALUES(1,N'first repetition');\nGO 3\nINSERT dbo.CommandLog VALUES(2,N'must not run');",
+    },
+  });
+  expect(response.status()).toBe(400);
+  const { error } = await response.json();
+  expect(error).toContain(
+    "Stopped at batch 2 of 3 (execution 2 of 3), script line 3.",
+  );
+  expect(error).toContain("PRIMARY KEY");
+  expect(await rows(databaseName, "SELECT * FROM dbo.CommandLog")).toEqual([
+    { Id: 1, Message: "first repetition" },
+  ]);
+});
+
+test("a failed repetition of a lone batch reports the execution", async () => {
+  const response = await api.post(url("/query"), {
+    data: { sql: "INSERT dbo.CommandLog VALUES(1,N'first run');\nGO 3" },
+  });
+  expect(response.status()).toBe(400);
+  const { error } = await response.json();
+  expect(error).toContain(
+    "Stopped at batch 1 of 1 (execution 2 of 3), script line 1.",
+  );
+  expect(error).toContain("Any changes committed before the error remain.");
+  expect(await rows(databaseName, "SELECT * FROM dbo.CommandLog")).toEqual([
+    { Id: 1, Message: "first run" },
+  ]);
+});
+
+test("an error inside a procedure reports the procedure line, not a script line", async () => {
+  const response = await api.post(url("/query"), {
+    data: {
+      sql: "CREATE PROCEDURE dbo.GoFails AS\nSELECT 1;\nSELECT 2;\nTHROW 50000, 'inside procedure', 1;\nGO\nEXEC dbo.GoFails;",
+    },
+  });
+  expect(response.status()).toBe(400);
+  expect((await response.json()).error).toBe(
+    "Stopped at batch 2 of 2, starting on script line 6, at line 4 of dbo.GoFails. Any changes committed before the error remain. SQL Server error: inside procedure",
+  );
+});
+
+test("single batch SQL errors remain plain and zero affected rows remain visible", async () => {
+  const response = await api.post(url("/query"), {
+    data: { sql: "THROW 50000, 'Plain SQL error', 1;" },
+  });
+  expect(response.status()).toBe(400);
+  expect(await response.json()).toEqual({ error: "Plain SQL error" });
+  const result = await query(
+    "SELECT 1;\nGO\nUPDATE dbo.CommandLog SET Message=N'no match' WHERE Id=1;\nGO\nSELECT 2;",
+  );
+  expect(result.recordsAffected).toBe(0);
+});
+
 test("filtered table exports and query snapshots match independent SQL across pages", async () => {
   test.setTimeout(120_000);
   const request: TableRequest = {
@@ -503,7 +678,7 @@ test("aborting a query preserves earlier commits and closes its SQL connection",
     method: "POST",
     headers: { ...headers, "Content-Type": "application/json" },
     body: JSON.stringify({
-      sql: "INSERT dbo.CommandLog VALUES(1,N'before cancel'); WAITFOR DELAY '00:01:00'; INSERT dbo.CommandLog VALUES(2,N'after cancel');",
+      sql: "INSERT dbo.CommandLog VALUES(1,N'before cancel');\nGO\nWAITFOR DELAY '00:01:00';\nGO\nINSERT dbo.CommandLog VALUES(2,N'after cancel');",
     }),
     signal: abort.signal,
   }).then(
