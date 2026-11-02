@@ -14,10 +14,10 @@ public sealed class TempQueries(AppPaths paths, ScriptFolders folders)
     public TempQuery Save(string name, string sql)
     {
         Directory.CreateDirectory(directory);
-        var stem = $"{DateTime.Now:yyyy-MM-dd_HH-mm-ss}_{FileNamePart(name)}";
-        var path = Write(stem, sql);
+        // Link first: a failed link then leaves no file for a retry to duplicate.
         folders.Add(directory);
-        return new(path);
+        var stem = $"{DateTime.Now:yyyy-MM-dd_HH-mm-ss}_{FileNamePart(name)}";
+        return new(Write(stem, sql));
     }
 
     private string Write(string stem, string sql)
@@ -25,14 +25,20 @@ public sealed class TempQueries(AppPaths paths, ScriptFolders folders)
         for (var attempt = 1; ; attempt++)
         {
             var path = Path.Combine(directory, attempt == 1 ? $"{stem}.sql" : $"{stem}_{attempt}.sql");
+            FileStream file;
+            // CreateNew makes "the name is free" and "the file is ours" one atomic step.
+            try { file = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None); }
+            catch (IOException) when (File.Exists(path)) { continue; }
             try
             {
-                // CreateNew makes "the name is free" and "the file is ours" one atomic step.
-                using var file = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None);
-                file.Write(new UTF8Encoding(false).GetBytes(sql));
+                using (file) file.Write(new UTF8Encoding(false).GetBytes(sql));
                 return path;
             }
-            catch (IOException) when (File.Exists(path)) { }
+            catch
+            {
+                File.Delete(path);
+                throw;
+            }
         }
     }
 

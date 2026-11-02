@@ -83,6 +83,12 @@ internal static class Program
                 closing = true;
                 window.Close();
             }
+            catch (Exception failure)
+            {
+                if (MessageBox.Show(window, $"Could not check for unsaved work: {failure.Message}\n\nClose ExQL anyway?", "Close ExQL", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
+                closing = true;
+                window.Close();
+            }
             finally { checkingClose = false; }
         };
         window.Loaded += async (_, _) =>

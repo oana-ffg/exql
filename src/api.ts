@@ -20,6 +20,14 @@ export async function request<T>(
     ? (undefined as T)
     : (response.json() as Promise<T>);
 }
+/** Frees a session while its page unloads, when nothing can show a failure. */
+export function releaseSessionOnUnload(sessionId: string) {
+  void fetch(`/api/sessions/${sessionId}`, {
+    method: "DELETE",
+    headers: { "X-Exql-Client": "1" },
+    keepalive: true,
+  });
+}
 async function exportResponse(
   path: string,
   body: unknown,

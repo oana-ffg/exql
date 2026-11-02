@@ -58,6 +58,7 @@ const SqlEditor = lazy(() =>
 export function Workspace({
   id,
   active,
+  closing,
   session,
   onSession,
   sql,
@@ -74,6 +75,7 @@ export function Workspace({
 }: {
   id: string;
   active: boolean;
+  closing: boolean;
   session: Session | null;
   onSession: (session: Session | null) => void;
   sql: string;
@@ -479,6 +481,8 @@ export function Workspace({
       role="tabpanel"
       aria-labelledby={`tab-${id}`}
       hidden={!active}
+      // Text typed while its tab is closing would be in neither the saved file nor the tab.
+      inert={closing}
     >
       <Sidebar
         visible={active}

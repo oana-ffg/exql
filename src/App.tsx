@@ -7,7 +7,7 @@ import {
 } from "react";
 import { Database, LoaderCircle, Plus, X } from "lucide-react";
 import { useScriptFolders } from "./scriptFolders";
-import { request } from "./api";
+import { releaseSessionOnUnload, request } from "./api";
 import { ConnectionDialog } from "./ConnectionDialog";
 import { UpdateNotice } from "./UpdateNotice";
 import { Workspace } from "./Workspace";
@@ -114,6 +114,19 @@ export default function App() {
       setError((event as CustomEvent<string>).detail);
     window.addEventListener("exql-storage-error", handler);
     return () => window.removeEventListener("exql-storage-error", handler);
+  }, []);
+  // Reloading the page starts new sessions, so the old ones must not pile up.
+  const liveSessions = useRef(sessions);
+  useLayoutEffect(() => {
+    liveSessions.current = sessions;
+  });
+  useEffect(() => {
+    const release = () => {
+      for (const session of Object.values(liveSessions.current))
+        if (session) releaseSessionOnUnload(session.id);
+    };
+    window.addEventListener("pagehide", release);
+    return () => window.removeEventListener("pagehide", release);
   }, []);
   const reportActivity = useCallback((id: string, next: Activity) => {
     setActivity((current) => ({ ...current, [id]: next }));
@@ -232,6 +245,8 @@ export default function App() {
     }
   }
   function connectTab(draft: Draft) {
+    // A second attempt could finish after, and overwrite, a connection chosen later.
+    if (reconnects[draft.id]?.pending) return;
     if (sessions[draft.id]) setConnectionDialog({ target: null });
     else if (draft.profileId) void reconnect(draft);
     else setConnectionDialog({ target: draft.id });
@@ -256,6 +271,7 @@ export default function App() {
       ),
     );
   }
+  const keptSql = useRef(new Map<string, string>());
   async function closeWorkspace(draft: Draft) {
     if (activity[draft.id]?.busy || reconnects[draft.id]?.pending || closing)
       return;
@@ -274,8 +290,10 @@ export default function App() {
         draft.sql.trim() &&
         !library.queries.some((query) => query.sql === draft.sql);
       // Save first: if this fails the tab stays open with its text.
-      if (keepSql) {
+      if (keepSql && keptSql.current.get(draft.id) !== draft.sql) {
         await request("/temp-queries", { name: draft.name, sql: draft.sql });
+        // Retrying a close that failed later on must not save a second copy.
+        keptSql.current.set(draft.id, draft.sql);
         void scriptFolders.refresh();
       }
       const session = sessions[draft.id];
@@ -305,6 +323,7 @@ export default function App() {
         return next;
       });
       clearReconnect(draft.id);
+      keptSql.current.delete(draft.id);
     } catch (error) {
       setError(`Could not close workspace: ${(error as Error).message}`);
     } finally {
@@ -428,6 +447,7 @@ export default function App() {
           key={draft.id}
           id={draft.id}
           active={active.id === draft.id}
+          closing={closing === draft.id}
           session={sessions[draft.id] ?? null}
           onSession={(session) => {
             setSessions((current) => ({ ...current, [draft.id]: session }));

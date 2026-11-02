@@ -11,6 +11,7 @@ public sealed class TempQueriesTests : IDisposable
 
     public TempQueriesTests()
     {
+        Directory.CreateDirectory(root);
         var paths = new AppPaths(root);
         folders = new ScriptFolders(paths);
         store = new TempQueries(paths, folders);
@@ -52,6 +53,15 @@ public sealed class TempQueriesTests : IDisposable
 
         Assert.Equal(Path.Combine(root, "temp_queries"), Path.GetDirectoryName(path));
         Assert.EndsWith($"_{expected}.sql", Path.GetFileName(path));
+    }
+
+    [Fact]
+    public void AFailedSaveReportsTheProblemInsteadOfRetrying()
+    {
+        File.WriteAllText(Path.Combine(root, "temp_queries"), "a file where the folder belongs");
+
+        Assert.Throws<IOException>(() => store.Save("Blocked", "SELECT 1;"));
+        Assert.Empty(folders.List());
     }
 
     [Fact]

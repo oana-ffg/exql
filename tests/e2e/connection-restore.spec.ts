@@ -252,6 +252,106 @@ test("closing a tab keeps its SQL in temp_queries without asking", async ({
   ).toBeVisible();
 });
 
+test("a tab cannot be edited while it closes, and a retried close saves once", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await saveAndConnect(page, "Restore A", databaseName);
+  await saveAndConnect(page, "Restore B", databaseName);
+  const panel = page.getByRole("tabpanel");
+  const sql = "SELECT 1 AS Original;";
+  await panel
+    .getByRole("button", { name: "New query SQL", exact: true })
+    .click();
+  await panel.locator(".cm-content").fill(sql);
+
+  let releaseSave!: () => void;
+  const saveHeld = new Promise<void>((resolve) => (releaseSave = resolve));
+  let saves = 0;
+  let path = "";
+  await page.route("**/api/temp-queries", async (route) => {
+    saves++;
+    const response = await route.fetch();
+    path = (await response.json()).path;
+    await saveHeld;
+    await route.fulfill({ response });
+  });
+  // The session delete fails once, after the SQL was already saved.
+  let deletes = 0;
+  await page.route("**/api/sessions/*", async (route) => {
+    if (route.request().method() === "DELETE" && deletes++ === 0)
+      return route.fulfill({ status: 500, json: { error: "Delete failed" } });
+    return route.continue();
+  });
+  const close = page.getByRole("button", {
+    name: "Close workspace Restore B",
+    exact: true,
+  });
+  await close.click();
+  const workspace = page.locator(".app-shell:not([hidden])");
+  await expect.poll(() => saves).toBe(1);
+  await expect(workspace).toHaveJSProperty("inert", true);
+  await panel
+    .locator(".cm-content")
+    .press("x", { noWaitAfter: true })
+    .catch(() => {
+      // An inert editor refuses keyboard focus; the assertion below is what matters.
+    });
+  releaseSave();
+  await expect(page.getByRole("alert")).toContainText("Delete failed");
+  await expect(workspace).toHaveJSProperty("inert", false);
+  await expect(panel.locator(".cm-content")).toHaveText(sql);
+  expect((await readFile(path, "utf8")).replaceAll("\r\n", "\n")).toBe(sql);
+
+  await close.click();
+  await expect(page.getByRole("tab")).toHaveCount(1);
+  expect(saves).toBe(1);
+});
+
+test("clicking connect during a reconnect does not start a second attempt", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await saveAndConnect(page, "Restore A", databaseName);
+  await expect
+    .poll(() => page.evaluate(() => window.exqlPendingWrites))
+    .toBe(0);
+  let attempts = 0;
+  let releaseConnect!: () => void;
+  const connectHeld = new Promise<void>(
+    (resolve) => (releaseConnect = resolve),
+  );
+  await page.route(profileConnect, async (route) => {
+    attempts++;
+    await connectHeld;
+    await route.continue();
+  });
+  await page.reload();
+  const panel = page.getByRole("tabpanel");
+  await expect(panel.getByText("Reconnecting…", { exact: true })).toBeVisible();
+  await expect.poll(() => attempts).toBe(1);
+  await panel.locator(".connection-card").click();
+  await expect(
+    panel.getByRole("button", { name: "Use a different connection" }),
+  ).toHaveCount(0);
+  releaseConnect();
+  await expect(panel.getByText("Connected", { exact: true })).toBeVisible();
+  expect(attempts).toBe(1);
+});
+
+test("repeated reloads free their sessions instead of reaching the session limit", async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  await page.goto("/");
+  await saveAndConnect(page, "Restore A", databaseName);
+  const panel = page.getByRole("tabpanel");
+  for (let reload = 0; reload < 22; reload++) {
+    await restart(page);
+    await expect(panel.getByText("Connected", { exact: true })).toBeVisible();
+  }
+});
+
 test("closing a tab still asks before discarding staged cell edits", async ({
   page,
 }) => {

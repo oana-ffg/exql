@@ -322,6 +322,7 @@ it("grid callbacks keep current rows, edits, filters, sort direction, and sessio
       createElement(Workspace, {
         id: "table",
         active: true,
+        closing: false,
         session: connection,
         onSession: noop,
         sql: "",
