@@ -1,6 +1,7 @@
 import {
   lazy,
   Suspense,
+  useCallback,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -48,6 +49,8 @@ import type {
   TableId,
   TableRequest,
 } from "./types";
+
+const noEdits: Edit[] = [];
 
 const SqlEditor = lazy(() =>
   import("./SqlEditor").then((module) => ({ default: module.SqlEditor })),
@@ -164,51 +167,96 @@ export function Workspace({
     };
   }, [script, busy]);
 
-  const endpoint = (path: string) => `/sessions/${session!.id}${path}`;
-  async function perform(
-    label: string,
-    task: (signal: AbortSignal) => Promise<void>,
-  ) {
-    if (controller.current) return;
-    const abort = new AbortController();
-    controller.current = abort;
-    setBusy(label);
-    setError("");
-    setNotice("");
-    const start = performance.now();
-    try {
-      await task(abort.signal);
-    } catch (err) {
-      if (abort.signal.aborted)
-        setError(
-          "Operation cancelled. SQL statements that already completed may have committed changes; refresh before retrying.",
-        );
-      else setError((err as Error).message);
-    } finally {
-      setElapsed(performance.now() - start);
-      setBusy("");
-      controller.current = null;
-    }
-  }
-  function discardEdits() {
+  const endpoint = useCallback(
+    (path: string) => `/sessions/${session!.id}${path}`,
+    [session],
+  );
+  const perform = useCallback(
+    async (label: string, task: (signal: AbortSignal) => Promise<void>) => {
+      if (controller.current) return;
+      const abort = new AbortController();
+      controller.current = abort;
+      setBusy(label);
+      setError("");
+      setNotice("");
+      const start = performance.now();
+      try {
+        await task(abort.signal);
+      } catch (err) {
+        if (abort.signal.aborted)
+          setError(
+            "Operation cancelled. SQL statements that already completed may have committed changes; refresh before retrying.",
+          );
+        else setError((err as Error).message);
+      } finally {
+        setElapsed(performance.now() - start);
+        setBusy("");
+        controller.current = null;
+      }
+    },
+    [],
+  );
+  const discardEdits = useCallback(() => {
     if (edits.length && !window.confirm("Discard your unsaved cell edits?"))
       return false;
     setEdits([]);
     return true;
-  }
-  async function loadTable(next: TableRequest, nextTable = table!) {
-    if (!session || !discardEdits()) return;
-    await perform("Loading table", async (signal) => {
-      const page = await request<GridResult>(endpoint("/table"), next, signal);
-      setTable(nextTable);
-      setTableRequest(next);
-      setTableData(page);
-      setFilters(next.filters);
-      setMatch(next.match);
-      setMode("table");
-      setGeneration((value) => value + 1);
-    });
-  }
+  }, [edits]);
+  const loadTable = useCallback(
+    async (next: TableRequest, nextTable = table!) => {
+      if (!session || !discardEdits()) return;
+      await perform("Loading table", async (signal) => {
+        const page = await request<GridResult>(
+          endpoint("/table"),
+          next,
+          signal,
+        );
+        setTable(nextTable);
+        setTableRequest(next);
+        setTableData(page);
+        setFilters(next.filters);
+        setMatch(next.match);
+        setMode("table");
+        setGeneration((value) => value + 1);
+      });
+    },
+    [session, discardEdits, perform, table, endpoint],
+  );
+
+  const editCell = useCallback(
+    (edit: Edit) => {
+      if (!data) return;
+      const columnIndex = data.columns.findIndex(
+        (column) => column.name === edit.column,
+      );
+      setEdits((current) => [
+        ...current.filter(
+          (item) => item.row !== edit.row || item.column !== edit.column,
+        ),
+        ...(data.rows[edit.row][columnIndex] === edit.value ? [] : [edit]),
+      ]);
+    },
+    [data],
+  );
+  const sortColumn = useCallback(
+    (column: string, descending?: boolean) => {
+      if (tableRequest)
+        void loadTable({
+          ...tableRequest,
+          sort: column,
+          descending:
+            descending ??
+            (tableRequest.sort === column && !tableRequest.descending),
+          offset: 0,
+        });
+    },
+    [tableRequest, loadTable],
+  );
+  const addFilter = useCallback((filter: Filter) => {
+    setFilters((current) => [...current, filter]);
+    setNotice("Filter added. Click Apply filters to update the view.");
+  }, []);
+
   async function openTable(next: TableId) {
     await loadTable(
       {
@@ -419,6 +467,7 @@ export function Workspace({
       hidden={!active}
     >
       <Sidebar
+        visible={active}
         session={session}
         active={mode === "table" ? table : null}
         library={library}
@@ -696,40 +745,12 @@ export function Workspace({
             key={`${mode}:${generation}`}
             data={data}
             table={mode === "table" ? table : null}
-            edits={mode === "table" ? edits : []}
-            onEdit={(edit) => {
-              const columnIndex = data.columns.findIndex(
-                (column) => column.name === edit.column,
-              );
-              setEdits((current) => [
-                ...current.filter(
-                  (item) =>
-                    item.row !== edit.row || item.column !== edit.column,
-                ),
-                ...(data.rows[edit.row][columnIndex] === edit.value
-                  ? []
-                  : [edit]),
-              ]);
-            }}
+            edits={mode === "table" ? edits : noEdits}
+            onEdit={editCell}
             sort={mode === "table" ? (tableRequest?.sort ?? null) : null}
             descending={tableRequest?.descending ?? false}
-            onSort={(column, descending) =>
-              tableRequest &&
-              loadTable({
-                ...tableRequest,
-                sort: column,
-                descending:
-                  descending ??
-                  (tableRequest.sort === column && !tableRequest.descending),
-                offset: 0,
-              })
-            }
-            onFilter={(filter) => {
-              setFilters((current) => [...current, filter]);
-              setNotice(
-                "Filter added. Click Apply filters to update the view.",
-              );
-            }}
+            onSort={sortColumn}
+            onFilter={addFilter}
             onNotice={setNotice}
             disabled={!!busy}
           />

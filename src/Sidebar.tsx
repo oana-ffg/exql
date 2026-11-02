@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ChevronDown,
   Code2,
@@ -26,6 +26,7 @@ type ExplorerMenu =
   | { kind: "folder"; id: string; name: string };
 
 export function Sidebar({
+  visible,
   session,
   active,
   library,
@@ -44,6 +45,7 @@ export function Sidebar({
   onDeleteQuery,
   disabled,
 }: {
+  visible: boolean;
   session: Session | null;
   active: TableId | null;
   library: Library;
@@ -65,6 +67,13 @@ export function Sidebar({
   const [search, setSearch] = useState("");
   const [panel, setPanel] = useState<"database" | "scripts">("database");
   const context = useContextMenu<ExplorerMenu>();
+  const { refresh } = scriptFolders;
+  useEffect(() => {
+    if (!visible || panel !== "scripts") return;
+    const focus = () => void refresh();
+    window.addEventListener("focus", focus);
+    return () => window.removeEventListener("focus", focus);
+  }, [visible, panel, refresh]);
   function menuActions(target: ExplorerMenu): MenuAction[] {
     if (target.kind === "table") {
       const name = `${quoteIdentifier(target.table.schema)}.${quoteIdentifier(target.table.name)}`;
