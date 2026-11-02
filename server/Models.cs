@@ -13,9 +13,9 @@ public sealed record RowChange(Dictionary<string, string?> Original, List<CellCh
 public sealed record EditRequest(string Schema, string Table, List<RowChange> Rows);
 public sealed record QueryRequest(string Sql);
 public sealed record QueryResult(string Id, List<Column> Columns, long RowCount, GridResult Page);
-public sealed record QueryResponse(List<QueryResult> Results, int RecordsAffected, List<string> Messages);
+public sealed record QueryResponse(List<QueryResult> Results, long RecordsAffected, List<string> Messages);
 public sealed record ExportRequest(TableRequest? Table, string? ResultId, string Format);
-public sealed class InputException(string message, int status = 400) : Exception(message)
+public sealed class InputException(string message, int status = 400, Exception? innerException = null) : Exception(message, innerException)
 {
     public int Status { get; } = status;
 }
