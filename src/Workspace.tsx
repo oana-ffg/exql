@@ -34,13 +34,14 @@ import {
   type OpenScript,
   type ScriptFoldersState,
 } from "./scriptFolders";
+import { RunTimer } from "./RunTimer";
 import { Sidebar } from "./Sidebar";
 import { Splitter } from "./Splitter";
 import { TimeoutSelect } from "./TimeoutSelect";
 import type { Pane } from "./paneLayout";
 import { folderPath } from "./queryLibrary";
 import { copyText } from "./clipboard";
-import { resultsText } from "./format";
+import { formatElapsed, resultsText } from "./format";
 import type {
   Edit,
   Filter,
@@ -124,6 +125,7 @@ export function Workspace({
   const [notice, setNotice] = useState("");
   const [generation, setGeneration] = useState(0);
   const [elapsed, setElapsed] = useState<number | null>(null);
+  const [startedAt, setStartedAt] = useState(0);
   // Lasts until changed, so re-running a failed migration keeps its longer limit.
   const [timeoutOverride, setTimeoutOverride] = useState<number | null>(null);
   const controller = useRef<AbortController | null>(null);
@@ -199,6 +201,7 @@ export function Workspace({
       setError("");
       setNotice("");
       const start = performance.now();
+      setStartedAt(start);
       try {
         await task(abort.signal);
       } catch (err) {
@@ -893,6 +896,7 @@ export function Workspace({
               <>
                 <LoaderCircle size={13} className="spin" />
                 {busy}…
+                <RunTimer startedAt={startedAt} />
                 <button
                   className="cancel-button"
                   onClick={() => controller.current?.abort()}
@@ -911,9 +915,7 @@ export function Workspace({
                   ? `${data.rows.length.toLocaleString()} rows loaded`
                   : "Ready"}
                 {elapsed !== null && (
-                  <span className="muted">
-                    · {(elapsed / 1000).toFixed(2)}s
-                  </span>
+                  <span className="muted">· {formatElapsed(elapsed)}</span>
                 )}
               </>
             )}

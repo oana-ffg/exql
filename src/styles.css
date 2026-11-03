@@ -816,6 +816,10 @@ main {
   min-width: 0;
   white-space: nowrap;
 }
+.run-timer {
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
 .keyboard-hint {
   overflow: hidden;
   min-width: 0;
