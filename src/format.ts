@@ -11,6 +11,21 @@ const numeric = new Set([
   "float",
   "real",
 ]);
+export function formatClock(milliseconds: number) {
+  const total = Math.max(0, Math.floor(milliseconds / 1000));
+  const seconds = String(total % 60).padStart(2, "0");
+  const minutes = Math.floor(total / 60) % 60;
+  const hours = Math.floor(total / 3600);
+  return hours
+    ? `${hours}:${String(minutes).padStart(2, "0")}:${seconds}`
+    : `${minutes}:${seconds}`;
+}
+// Below this, two decimals would round up to "60.00s".
+const secondsDisplayLimit = 59_995;
+export const formatElapsed = (milliseconds: number) =>
+  milliseconds < secondsDisplayLimit
+    ? `${(milliseconds / 1000).toFixed(2)}s`
+    : formatClock(milliseconds);
 export const quoteIdentifier = (name: string) =>
   `[${name.replaceAll("]", "]]")}]`;
 const csvCell = (value: Cell) =>

@@ -1,6 +1,8 @@
 import { describe, expect, test } from "vitest";
 import {
   csvRows,
+  formatClock,
+  formatElapsed,
   jsonRows,
   quoteIdentifier,
   querySqlRows,
@@ -140,4 +142,31 @@ test("handles results with very many separate backtick runs", () => {
   const text = resultsText([{ rowCount: 1, csv }], -1, []);
   expect(text.startsWith("Result 1 of 1 · 1 row\n`````csv\n")).toBe(true);
   expect(text.endsWith("\n`````")).toBe(true);
+});
+
+describe("run times", () => {
+  test.each([
+    [0, "0:00"],
+    [999, "0:00"],
+    [1_000, "0:01"],
+    [59_999, "0:59"],
+    [60_000, "1:00"],
+    [3_599_000, "59:59"],
+    [3_600_000, "1:00:00"],
+    [3_725_120, "1:02:05"],
+    [90_000_000, "25:00:00"],
+    [-50, "0:00"],
+  ])("clock for %i ms is %s", (milliseconds, expected) => {
+    expect(formatClock(milliseconds)).toBe(expected);
+  });
+
+  test.each([
+    [60, "0.06s"],
+    [59_994, "59.99s"],
+    [59_995, "0:59"],
+    [60_000, "1:00"],
+    [3_725_120, "1:02:05"],
+  ])("total for %i ms is %s", (milliseconds, expected) => {
+    expect(formatElapsed(milliseconds)).toBe(expected);
+  });
 });
