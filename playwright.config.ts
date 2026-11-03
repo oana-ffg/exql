@@ -1,5 +1,4 @@
 import { defineConfig } from "@playwright/test";
-import { randomUUID } from "node:crypto";
 import { mkdirSync, mkdtempSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
@@ -17,7 +16,6 @@ const freePort = () =>
   });
 
 process.env.EXQL_TEST_PORT ??= String(await freePort());
-process.env.EXQL_TEST_DATABASE ??= `ExqlTest_${randomUUID().replaceAll("-", "")}`;
 process.env.EXQL_TEST_DATA_DIRECTORY ??= mkdtempSync(
   join(tmpdir(), "exql-host-"),
 );
