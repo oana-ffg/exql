@@ -75,7 +75,7 @@ To publish a release, update the version with `npm version patch --no-git-tag-ve
 
 The release script currently produces full update packages. `publish.ps1` can also generate deltas when its output directory contains the previous full package. Do not upload experimental test feeds as production releases.
 
-For frontend hot reload, first build the frontend once so embedded assets exist, then run `npm run server` and `npm run dev` in separate terminals. The frontend dev URL is `http://127.0.0.1:5173`; the standalone test host is `http://127.0.0.1:5274`. To isolate test settings, run:
+For frontend hot reload, first build the frontend once so embedded assets exist, then run `npm run server` and `npm run dev` in separate terminals. The frontend dev URL is `http://127.0.0.1:5173`; the standalone dev host is `http://127.0.0.1:5274`. Playwright runs start their own host on a free port, so they can run alongside the dev host and each other. To isolate test settings, run:
 
 ```powershell
 dotnet run --project devhost -- --DataDirectory "$PWD/artifacts/test-state"

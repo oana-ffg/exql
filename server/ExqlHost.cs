@@ -13,7 +13,7 @@ public static class ExqlHost
     {
         CultureInfo.DefaultThreadCurrentCulture = CultureInfo.InvariantCulture;
         var builder = WebApplication.CreateBuilder(args);
-        builder.WebHost.UseUrls(desktop ? "http://127.0.0.1:0" : "http://127.0.0.1:5274");
+        builder.WebHost.UseUrls(desktop ? "http://127.0.0.1:0" : $"http://127.0.0.1:{builder.Configuration.GetValue("DevHostPort", 5274)}");
         builder.Services.AddSingleton<Sessions>();
         builder.Services.AddSingleton(new AppPaths(builder.Configuration["DataDirectory"] ?? AppPaths.DefaultRoot));
         builder.Services.AddSingleton<ConnectionProfiles>();

@@ -1,9 +1,22 @@
 import { defineConfig } from "@playwright/test";
 import { randomUUID } from "node:crypto";
 import { mkdirSync, mkdtempSync } from "node:fs";
+import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+// Concurrent runs from different checkouts must not fight over one port.
+const freePort = () =>
+  new Promise<number>((resolve, reject) => {
+    const server = createServer();
+    server.on("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const { port } = server.address() as { port: number };
+      server.close(() => resolve(port));
+    });
+  });
+
+process.env.EXQL_TEST_PORT ??= String(await freePort());
 process.env.EXQL_TEST_DATABASE ??= `ExqlTest_${randomUUID().replaceAll("-", "")}`;
 process.env.EXQL_TEST_DATA_DIRECTORY ??= mkdtempSync(
   join(tmpdir(), "exql-host-"),
@@ -20,7 +33,7 @@ export default defineConfig({
   timeout: 60_000,
   reporter: [["list"], ["html", { open: "never" }]],
   use: {
-    baseURL: "http://127.0.0.1:5274",
+    baseURL: `http://127.0.0.1:${process.env.EXQL_TEST_PORT}`,
     channel: "msedge",
     extraHTTPHeaders: { "X-Exql-Client": "1" },
     viewport: { width: 1440, height: 960 },
@@ -29,8 +42,9 @@ export default defineConfig({
   },
   webServer: {
     command: "node scripts/ci/start-host.mjs",
-    url: "http://127.0.0.1:5274",
-    reuseExistingServer: false,
+    // Wait for this run's own host. A URL check would also accept another
+    // run's host on this port, and these tests would then clear its data.
+    wait: { stdout: /Now listening on:/ },
     timeout: 120_000,
     stdout: "pipe",
     stderr: "pipe",

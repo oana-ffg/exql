@@ -30,9 +30,9 @@ const tableRequest = (table = "WorkItems"): TableRequest => ({
 let session: Session;
 let api: APIRequestContext;
 const url = (path: string) => `/api/sessions/${session.id}${path}`;
-test.beforeEach(async ({ playwright }) => {
+test.beforeEach(async ({ playwright, baseURL }) => {
   api = await playwright.request.newContext({
-    baseURL: "http://127.0.0.1:5274",
+    baseURL,
     extraHTTPHeaders: headers,
   });
   const response = await api.post("/api/connect", { data: connection });
@@ -745,9 +745,11 @@ test("filtered table exports and query snapshots match independent SQL across pa
   ).toEqual([{ Priority: 2 }]);
 });
 
-test("aborting a query preserves earlier commits and closes its SQL connection", async () => {
+test("aborting a query preserves earlier commits and closes its SQL connection", async ({
+  baseURL,
+}) => {
   const abort = new AbortController();
-  const running = fetch(`http://127.0.0.1:5274${url("/query")}`, {
+  const running = fetch(`${baseURL}${url("/query")}`, {
     method: "POST",
     headers: { ...headers, "Content-Type": "application/json" },
     body: JSON.stringify({
