@@ -1,7 +1,18 @@
-import { test as base, expect } from "@playwright/test";
+import { test as base, expect, type Page } from "@playwright/test";
 import { databaseName, DisposableDatabase } from "./database";
 
 export { expect };
+
+// Checks and clicks in one step inside the page. The button can disappear or be
+// disabled at any moment, and a locator click would wait until the test times out.
+export const cancelRunningQueries = (page: Page) =>
+  page.evaluate(() => {
+    for (const button of document.querySelectorAll<HTMLButtonElement>(
+      ".cancel-button",
+    ))
+      if (button.checkVisibility()) button.click();
+  });
+
 export const test = base.extend<{ isolatedDatabase: void }>({
   page: async ({ page, request }, use) => {
     const sessions = new Set<string>();
@@ -32,8 +43,7 @@ export const test = base.extend<{ isolatedDatabase: void }>({
       new Promise((resolve) => setTimeout(resolve, 5_000)),
     ]);
     // Aborting a failed journey's query also releases its per-session gate.
-    const cancel = page.locator(".cancel-button:visible");
-    if (!page.isClosed() && (await cancel.count())) await cancel.click();
+    if (!page.isClosed()) await cancelRunningQueries(page);
     for (const id of sessions) {
       const response = await request.delete(`/api/sessions/${id}`);
       expect([204, 404], await response.text()).toContain(response.status());

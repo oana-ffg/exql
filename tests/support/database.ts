@@ -9,7 +9,9 @@ import sql from "mssql";
 import type { Connection } from "../../src/types.ts";
 
 const run = promisify(execFile);
-export const databaseName = process.env.EXQL_TEST_DATABASE!;
+// One name per worker process. A test that times out during teardown can leave its
+// database behind, and the replacement worker must not collide with it.
+export const databaseName = `ExqlTest_${randomUUID().replaceAll("-", "")}`;
 export const settings = {
   server: process.env.EXQL_TEST_SERVER ?? "localhost",
   authentication: process.env.EXQL_TEST_AUTH ?? "windows",
