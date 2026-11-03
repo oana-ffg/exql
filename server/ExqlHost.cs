@@ -111,7 +111,7 @@ public static class ExqlHost
         api.MapPost("/query", async (QueryRequest request, HttpContext context, CancellationToken ct) =>
         {
             await using var connection = await Database.Open(Session(context), ct);
-            return await QueryStore.Run(Session(context), connection, request.Sql, ct);
+            return await QueryStore.Run(Session(context), connection, request.Sql, request.TimeoutSeconds ?? QueryStore.DefaultTimeoutSeconds, ct);
         });
         api.MapGet("/results/{resultId}", (string resultId, int offset, HttpContext context, CancellationToken ct) => QueryStore.Page(Session(context), resultId, offset, ct));
         api.MapPost("/export", async (ExportRequest request, HttpContext context, CancellationToken ct) =>

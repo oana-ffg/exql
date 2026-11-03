@@ -193,8 +193,9 @@ kbd {
   overflow: hidden;
 }
 .sidebar {
-  width: 250px;
-  flex-shrink: 0;
+  /* Shrinks only when a saved width no longer leaves main its minimum width. */
+  flex: 0 1 var(--sidebar-width, 250px);
+  min-width: 210px;
   background: #141b25;
   border-right: 1px solid var(--line);
   display: flex;
@@ -422,9 +423,44 @@ summary:focus-within .folder-actions {
 main {
   display: flex;
   flex-direction: column;
-  min-width: 0;
-  flex: 1;
+  min-width: 420px;
+  flex: 1 1 0;
   background: #101722;
+}
+.splitter {
+  position: relative;
+  z-index: 5;
+  flex: none;
+  outline: none;
+  touch-action: none;
+  user-select: none;
+}
+.splitter::after {
+  content: "";
+  position: absolute;
+  background: transparent;
+  transition: background-color 120ms;
+}
+.splitter:hover::after,
+.splitter:active::after,
+.splitter:focus-visible::after {
+  background: var(--accent);
+}
+.splitter-x {
+  width: 6px;
+  margin: 0 -3px;
+  cursor: col-resize;
+}
+.splitter-x::after {
+  inset: 0 2px;
+}
+.splitter-y {
+  height: 6px;
+  margin: -3px 0;
+  cursor: row-resize;
+}
+.splitter-y::after {
+  inset: 2px 0;
 }
 .workspace-header {
   height: 53px;
@@ -834,9 +870,40 @@ main {
   font-size: 12px;
   padding: 10px 16px;
 }
+/* Sits below the SQL editor, which keeps the rest of the height. */
+.welcome.compact {
+  flex: none;
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: 8px 12px;
+  min-height: 0;
+  padding: 10px 22px;
+  border-top: 1px solid var(--line);
+  text-align: left;
+}
+.welcome.compact p {
+  margin: 0;
+  max-width: none;
+}
+.welcome.compact .primary {
+  padding: 7px 11px;
+}
 .query-toolbar {
   padding: 12px 22px;
   border-bottom: 1px solid var(--line);
+}
+.timeout-picker {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.timeout-picker select {
+  padding: 5px 7px;
+  font-size: 11px;
 }
 .query-toolbar strong {
   font-size: 12px;
@@ -846,13 +913,36 @@ main {
   font-size: 9px;
   margin-left: 8px;
 }
-.sql-editor {
-  height: 225px;
+.query-panes {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.editor-pane {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
   min-height: 100px;
-  max-height: 55vh;
-  resize: vertical;
+  overflow: hidden;
+}
+.editor-pane.split {
+  flex: 0 1 var(--editor-height, 225px);
+}
+.results-pane {
+  display: flex;
+  flex-direction: column;
+  flex: none;
+  min-width: 0;
+}
+.results-pane.split {
+  flex: 1 1 0;
+  min-height: 188px;
+}
+.sql-editor {
+  flex: 1;
+  min-height: 0;
   overflow: auto;
-  flex-shrink: 0;
 }
 .results-heading {
   display: flex;
@@ -1022,7 +1112,7 @@ dialog .hint svg {
 }
 @media (max-width: 1100px) {
   .sidebar {
-    width: 218px;
+    flex-basis: var(--sidebar-width, 218px);
   }
   .keyboard-hint {
     display: none;

@@ -43,7 +43,7 @@ export const test = base.extend<{ isolatedDatabase: void }>({
     async ({ request }, use) => {
       const database = await new DisposableDatabase(databaseName).create();
       try {
-        for (const key of ["scratch", "library"]) {
+        for (const key of ["scratch", "library", "settings"]) {
           const response = await request.post(`/api/workspace/${key}`, {
             data: null,
           });

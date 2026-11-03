@@ -136,7 +136,7 @@ public sealed class SqlBatchesTests
     {
         using var session = new DatabaseSession("");
         await using var connection = new SqlConnection();
-        var error = await Assert.ThrowsAsync<InputException>(() => QueryStore.Run(session, connection, sql!, CancellationToken.None));
+        var error = await Assert.ThrowsAsync<InputException>(() => QueryStore.Run(session, connection, sql!, QueryStore.DefaultTimeoutSeconds, CancellationToken.None));
         Assert.Contains(message, error.Message);
     }
 
@@ -147,6 +147,6 @@ public sealed class SqlBatchesTests
         await using var connection = new SqlConnection();
         using var abort = new CancellationTokenSource();
         abort.Cancel();
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => QueryStore.Run(session, connection, "SELECT 1;\nGO 3", abort.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => QueryStore.Run(session, connection, "SELECT 1;\nGO 3", QueryStore.DefaultTimeoutSeconds, abort.Token));
     }
 }

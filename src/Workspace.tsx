@@ -35,6 +35,9 @@ import {
   type ScriptFoldersState,
 } from "./scriptFolders";
 import { Sidebar } from "./Sidebar";
+import { Splitter } from "./Splitter";
+import { TimeoutSelect } from "./TimeoutSelect";
+import type { Pane } from "./paneLayout";
 import { folderPath } from "./queryLibrary";
 import { copyText } from "./clipboard";
 import { resultsText } from "./format";
@@ -72,6 +75,8 @@ export function Workspace({
   onConnect,
   onChooseConnection,
   onActivity,
+  onPaneResize,
+  defaultTimeoutSeconds,
 }: {
   id: string;
   active: boolean;
@@ -89,6 +94,8 @@ export function Workspace({
   onConnect: () => void;
   onChooseConnection: () => void;
   onActivity: (id: string, state: { busy: string; edits: number }) => void;
+  onPaneResize: (pane: Pane, size: number | null) => void;
+  defaultTimeoutSeconds: number;
 }) {
   const [mode, setMode] = useState<"table" | "query">(
     sql.trim() ? "query" : "table",
@@ -117,6 +124,8 @@ export function Workspace({
   const [notice, setNotice] = useState("");
   const [generation, setGeneration] = useState(0);
   const [elapsed, setElapsed] = useState<number | null>(null);
+  // Lasts until changed, so re-running a failed migration keeps its longer limit.
+  const [timeoutOverride, setTimeoutOverride] = useState<number | null>(null);
   const controller = useRef<AbortController | null>(null);
   const data = mode === "table" ? tableData : queryData;
   const offset = mode === "table" ? (tableRequest?.offset ?? 0) : queryOffset;
@@ -303,7 +312,7 @@ export function Workspace({
   async function executeQuery(text: string, signal: AbortSignal) {
     const response = await request<QueryResponse>(
       endpoint("/query"),
-      { sql: text },
+      { sql: text, timeoutSeconds: timeoutOverride ?? defaultTimeoutSeconds },
       signal,
     );
     setQueryResponse(response);
@@ -474,6 +483,60 @@ export function Workspace({
     });
   }
 
+  const grid = data && (
+    <DataGrid
+      key={`${mode}:${generation}`}
+      data={data}
+      table={mode === "table" ? table : null}
+      edits={mode === "table" ? edits : noEdits}
+      onEdit={editCell}
+      sort={mode === "table" ? (tableRequest?.sort ?? null) : null}
+      descending={tableRequest?.descending ?? false}
+      onSort={sortColumn}
+      onFilter={addFilter}
+      onNotice={setNotice}
+      disabled={!!busy}
+    />
+  );
+  const connectionPrompt = (
+    <div className={mode === "query" ? "welcome compact" : "welcome"}>
+      <p>
+        {mode === "query"
+          ? "Connect to a database to run your SQL."
+          : session
+            ? "Choose a table from the explorer, or open a query."
+            : "Connect to a database, or open SQL scripts from the sidebar."}
+      </p>
+      {!session && reconnecting && (
+        <p role="status">
+          <LoaderCircle size={14} className="spin" /> Reconnecting to{" "}
+          {savedConnection}…
+        </p>
+      )}
+      {!session && !reconnecting && (
+        <>
+          {reconnectError && (
+            <p className="form-error" role="alert">
+              Could not reconnect to {savedConnection}: {reconnectError}
+            </p>
+          )}
+          <button className="primary" onClick={onConnect}>
+            <PlugZap size={16} />
+            {savedConnection
+              ? `Reconnect to ${savedConnection}`
+              : "Connect to database"}
+            <ArrowRight size={16} />
+          </button>
+          {savedConnection && (
+            <button onClick={onChooseConnection}>
+              Use a different connection
+            </button>
+          )}
+        </>
+      )}
+    </div>
+  );
+
   return (
     <div
       className="app-shell"
@@ -520,6 +583,11 @@ export function Workspace({
             if (savedId === id) setSavedId(null);
           }
         }}
+      />
+      <Splitter
+        pane="sidebarWidth"
+        label="Resize sidebar"
+        onResize={onPaneResize}
       />
       <main>
         <header className="workspace-header">
@@ -640,6 +708,16 @@ export function Workspace({
                   <Save size={14} />
                   Save query
                 </button>
+                <label className="timeout-picker">
+                  Timeout
+                  <TimeoutSelect
+                    label="Timeout for this script"
+                    value={timeoutOverride}
+                    defaultSeconds={defaultTimeoutSeconds}
+                    onChange={setTimeoutOverride}
+                    disabled={!!busy}
+                  />
+                </label>
                 <button
                   className="primary"
                   disabled={!session || !!busy || !(selection || sql).trim()}
@@ -651,166 +729,148 @@ export function Workspace({
                 </button>
               </div>
             </div>
-            <Suspense
-              fallback={<div className="sql-editor hint">Loading editor…</div>}
-            >
-              <SqlEditor
-                key={editorGeneration}
-                value={sql}
-                onChange={setSql}
-                onSelection={setSelection}
-                onRun={runQuery}
-                canRun={!!session && !busy && !!(selection || sql).trim()}
-                onNotice={setNotice}
-              />
-            </Suspense>
-            <div className="results-heading">
-              <strong>RESULTS</strong>
-              {queryResponse?.results.map((result, i) => (
-                <button
-                  className={
-                    i === resultIndex ? "result-tab active" : "result-tab"
+            <div className="query-panes">
+              <div className={data ? "editor-pane split" : "editor-pane"}>
+                <Suspense
+                  fallback={
+                    <div className="sql-editor hint">Loading editor…</div>
                   }
-                  disabled={!!busy}
-                  key={result.id}
-                  onClick={() => {
-                    setResultIndex(i);
-                    setQueryData(result.page);
-                    setQueryOffset(0);
-                    setGeneration((value) => value + 1);
-                  }}
                 >
-                  Result {i + 1}
-                  <span>{result.rowCount.toLocaleString()}</span>
-                </button>
-              ))}
-              {queryResponse && queryResponse.recordsAffected >= 0 && (
-                <span className="hint">
-                  {queryResponse.recordsAffected} rows affected
-                </span>
-              )}
-              <div className="spacer" />
-              {queryResponse?.results.length ? (
-                <button
-                  disabled={!!busy}
-                  title="Copy every result set, with messages, as text"
-                  onClick={() => void copyAllResults(queryResponse)}
-                >
-                  <Copy size={14} />
-                  Copy all as text
-                </button>
-              ) : null}
+                  <SqlEditor
+                    key={editorGeneration}
+                    value={sql}
+                    onChange={setSql}
+                    onSelection={setSelection}
+                    onRun={runQuery}
+                    canRun={!!session && !busy && !!(selection || sql).trim()}
+                    onNotice={setNotice}
+                  />
+                </Suspense>
+              </div>
               {data && (
-                <button disabled={!!busy} onClick={() => setExportOpen(true)}>
-                  <Download size={14} />
-                  Export result
-                </button>
+                <Splitter
+                  pane="editorHeight"
+                  label="Resize SQL editor and results"
+                  onResize={onPaneResize}
+                />
+              )}
+              {queryResponse && (
+                <div className={data ? "results-pane split" : "results-pane"}>
+                  {(queryResponse.results.length > 0 ||
+                    queryResponse.recordsAffected >= 0) && (
+                    <div className="results-heading">
+                      <strong>RESULTS</strong>
+                      {queryResponse.results.map((result, i) => (
+                        <button
+                          className={
+                            i === resultIndex
+                              ? "result-tab active"
+                              : "result-tab"
+                          }
+                          disabled={!!busy}
+                          key={result.id}
+                          onClick={() => {
+                            setResultIndex(i);
+                            setQueryData(result.page);
+                            setQueryOffset(0);
+                            setGeneration((value) => value + 1);
+                          }}
+                        >
+                          Result {i + 1}
+                          <span>{result.rowCount.toLocaleString()}</span>
+                        </button>
+                      ))}
+                      {queryResponse.recordsAffected >= 0 && (
+                        <span className="hint">
+                          {queryResponse.recordsAffected} rows affected
+                        </span>
+                      )}
+                      <div className="spacer" />
+                      {queryResponse.results.length ? (
+                        <button
+                          disabled={!!busy}
+                          title="Copy every result set, with messages, as text"
+                          onClick={() => void copyAllResults(queryResponse)}
+                        >
+                          <Copy size={14} />
+                          Copy all as text
+                        </button>
+                      ) : null}
+                      {data && (
+                        <button
+                          disabled={!!busy}
+                          onClick={() => setExportOpen(true)}
+                        >
+                          <Download size={14} />
+                          Export result
+                        </button>
+                      )}
+                    </div>
+                  )}
+                  {queryResponse.messages.length ? (
+                    <details className="query-messages">
+                      <summary>
+                        Messages ({queryResponse.messages.length})
+                      </summary>
+                      <pre>{queryResponse.messages.join("\n")}</pre>
+                    </details>
+                  ) : null}
+                  {grid}
+                </div>
               )}
             </div>
-            {queryResponse?.messages.length ? (
-              <details className="query-messages">
-                <summary>Messages ({queryResponse.messages.length})</summary>
-                <pre>{queryResponse.messages.join("\n")}</pre>
-              </details>
-            ) : null}
+            {!session && connectionPrompt}
           </>
         ) : (
-          table && (
-            <>
-              <div className="table-toolbar">
-                <div>
-                  <h1>{table.name}</h1>
-                  <span className="tag">{table.kind}</span>
-                </div>
-                <div>
-                  <button
-                    disabled={!!busy}
-                    onClick={() => tableRequest && loadTable(tableRequest)}
-                  >
-                    <RefreshCw size={14} />
-                    Refresh
-                  </button>
-                  <button
-                    disabled={!!busy || !data}
-                    onClick={() => setExportOpen(true)}
-                  >
-                    <Download size={14} />
-                    Export
-                  </button>
-                </div>
-              </div>
-              <FilterBar
-                columns={tableData?.columns ?? []}
-                filters={filters}
-                match={match}
-                onMatch={setMatch}
-                onChange={(next) => {
-                  setFilters(next);
-                  if (!next.length && tableRequest?.filters.length)
-                    void loadTable({ ...tableRequest, filters: [], offset: 0 });
-                }}
-                onApply={() =>
-                  tableRequest &&
-                  loadTable({ ...tableRequest, filters, match, offset: 0 })
-                }
-                disabled={!!busy}
-              />
-            </>
-          )
-        )}
-        {data ? (
-          <DataGrid
-            key={`${mode}:${generation}`}
-            data={data}
-            table={mode === "table" ? table : null}
-            edits={mode === "table" ? edits : noEdits}
-            onEdit={editCell}
-            sort={mode === "table" ? (tableRequest?.sort ?? null) : null}
-            descending={tableRequest?.descending ?? false}
-            onSort={sortColumn}
-            onFilter={addFilter}
-            onNotice={setNotice}
-            disabled={!!busy}
-          />
-        ) : (
-          <div className="welcome">
-            <p>
-              {mode === "query"
-                ? session
-                  ? "Write SQL above, then run it to explore the results."
-                  : "Connect to a database to run your SQL."
-                : session
-                  ? "Choose a table from the explorer, or open a query."
-                  : "Connect to a database, or open SQL scripts from the sidebar."}
-            </p>
-            {!session && reconnecting && (
-              <p role="status">
-                <LoaderCircle size={14} className="spin" /> Reconnecting to{" "}
-                {savedConnection}…
-              </p>
-            )}
-            {!session && !reconnecting && (
+          <>
+            {table && (
               <>
-                {reconnectError && (
-                  <p className="form-error" role="alert">
-                    Could not reconnect to {savedConnection}: {reconnectError}
-                  </p>
-                )}
-                <button className="primary" onClick={onConnect}>
-                  <PlugZap size={16} />
-                  {savedConnection
-                    ? `Reconnect to ${savedConnection}`
-                    : "Connect to database"}
-                  <ArrowRight size={16} />
-                </button>
-                {savedConnection && (
-                  <button onClick={onChooseConnection}>
-                    Use a different connection
-                  </button>
-                )}
+                <div className="table-toolbar">
+                  <div>
+                    <h1>{table.name}</h1>
+                    <span className="tag">{table.kind}</span>
+                  </div>
+                  <div>
+                    <button
+                      disabled={!!busy}
+                      onClick={() => tableRequest && loadTable(tableRequest)}
+                    >
+                      <RefreshCw size={14} />
+                      Refresh
+                    </button>
+                    <button
+                      disabled={!!busy || !data}
+                      onClick={() => setExportOpen(true)}
+                    >
+                      <Download size={14} />
+                      Export
+                    </button>
+                  </div>
+                </div>
+                <FilterBar
+                  columns={tableData?.columns ?? []}
+                  filters={filters}
+                  match={match}
+                  onMatch={setMatch}
+                  onChange={(next) => {
+                    setFilters(next);
+                    if (!next.length && tableRequest?.filters.length)
+                      void loadTable({
+                        ...tableRequest,
+                        filters: [],
+                        offset: 0,
+                      });
+                  }}
+                  onApply={() =>
+                    tableRequest &&
+                    loadTable({ ...tableRequest, filters, match, offset: 0 })
+                  }
+                  disabled={!!busy}
+                />
               </>
             )}
-          </div>
+            {grid ?? connectionPrompt}
+          </>
         )}
         {edits.length > 0 && mode === "table" && (
           <div className="edit-bar">
