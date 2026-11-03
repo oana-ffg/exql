@@ -1,10 +1,18 @@
 import { useRef, useState } from "react";
 import type { KeyboardEvent, PointerEvent } from "react";
-import { clampPaneSize, paneAxes, setPaneSize, type Pane } from "./paneLayout";
+import {
+  clampPaneSize,
+  paneAxes,
+  paneSizeOverride,
+  setPaneSize,
+  type Pane,
+} from "./paneLayout";
 
 const keyboardStep = 16;
 
 interface Range {
+  // Where the resized pane begins, which moves when a banner appears above it.
+  origin: number;
   now: number;
   min: number;
   max: number;
@@ -18,6 +26,10 @@ function measure(splitter: HTMLElement, pane: Pane): Range {
     const { width, height } = element.getBoundingClientRect();
     return horizontal ? width : height;
   };
+  const originOf = (element: Element) => {
+    const { left, top } = element.getBoundingClientRect();
+    return horizontal ? left : top;
+  };
   const minimumOf = (element: Element) => {
     const { minWidth, minHeight } = getComputedStyle(element);
     return parseFloat(horizontal ? minWidth : minHeight) || 0;
@@ -26,6 +38,7 @@ function measure(splitter: HTMLElement, pane: Pane): Range {
   const neighbour = splitter.nextElementSibling!;
   const now = sizeOf(resized);
   return {
+    origin: originOf(resized),
     now,
     min: minimumOf(resized),
     max: now + sizeOf(neighbour) - minimumOf(neighbour),
@@ -43,9 +56,13 @@ export function Splitter({
 }) {
   const axis = paneAxes[pane];
   const [range, setRange] = useState<Range | null>(null);
-  const drag = useRef<{ origin: number; start: Range; size: number } | null>(
-    null,
-  );
+  const drag = useRef<{
+    // How far the pointer is from the pane's far edge, so the edge follows it.
+    grabOffset: number;
+    startSize: number;
+    startOverride: number | null;
+    size: number;
+  } | null>(null);
   const position = (event: PointerEvent) =>
     axis === "x" ? event.clientX : event.clientY;
 
@@ -53,15 +70,21 @@ export function Splitter({
     if (event.button !== 0) return;
     event.currentTarget.setPointerCapture(event.pointerId);
     const start = measure(event.currentTarget, pane);
-    drag.current = { origin: position(event), start, size: start.now };
+    drag.current = {
+      grabOffset: position(event) - start.origin - start.now,
+      startSize: start.now,
+      startOverride: paneSizeOverride(pane),
+      size: start.now,
+    };
   }
-  function pointerMove(event: PointerEvent) {
+  function pointerMove(event: PointerEvent<HTMLDivElement>) {
     if (!drag.current) return;
-    const { origin, start } = drag.current;
+    // Measured on every move: a banner can shift the panes during a drag.
+    const current = measure(event.currentTarget, pane);
     const size = clampPaneSize(
-      start.now + position(event) - origin,
-      start.min,
-      start.max,
+      position(event) - current.origin - drag.current.grabOffset,
+      current.min,
+      current.max,
     );
     drag.current.size = size;
     // Writing the CSS variable directly keeps a drag from re-rendering every
@@ -70,9 +93,11 @@ export function Splitter({
   }
   function pointerUp() {
     if (!drag.current) return;
-    const { size, start } = drag.current;
+    const { size, startSize, startOverride } = drag.current;
     drag.current = null;
-    if (size !== start.now) onResize(pane, size);
+    if (size !== startSize) onResize(pane, size);
+    // No change to save, so a default size must stay free to follow the window.
+    else setPaneSize(pane, startOverride);
   }
   function keyDown(event: KeyboardEvent<HTMLDivElement>) {
     const current = measure(event.currentTarget, pane);

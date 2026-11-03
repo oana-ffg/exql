@@ -3,6 +3,7 @@ import { afterEach, expect, it } from "vitest";
 import {
   applyPaneLayout,
   clampPaneSize,
+  paneSizeOverride,
   setPaneSize,
 } from "../../src/paneLayout";
 
@@ -24,10 +25,12 @@ it("writes saved sizes and returns reset panes to their CSS default", () => {
   expect(style.getPropertyValue("--sidebar-width")).toBe("400px");
   expect(style.getPropertyValue("--editor-height")).toBe("500px");
 
+  expect(paneSizeOverride("sidebarWidth")).toBe(400);
   setPaneSize("sidebarWidth", 420);
   expect(style.getPropertyValue("--sidebar-width")).toBe("420px");
 
   applyPaneLayout({ sidebarWidth: null, editorHeight: 500 });
   expect(style.getPropertyValue("--sidebar-width")).toBe("");
+  expect(paneSizeOverride("sidebarWidth")).toBeNull();
   expect(style.getPropertyValue("--editor-height")).toBe("500px");
 });

@@ -19,6 +19,13 @@ const paneVariables: Record<Pane, string> = {
   editorHeight: "--editor-height",
 };
 
+export function paneSizeOverride(pane: Pane) {
+  const value = document.documentElement.style.getPropertyValue(
+    paneVariables[pane],
+  );
+  return value ? parseFloat(value) : null;
+}
+
 export function setPaneSize(pane: Pane, size: number | null) {
   const { style } = document.documentElement;
   if (size === null) style.removeProperty(paneVariables[pane]);

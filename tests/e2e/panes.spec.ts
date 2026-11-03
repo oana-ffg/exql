@@ -210,3 +210,96 @@ test("an offline query tab keeps the editor large and its connect button visible
   await expect(page.getByText("RESULTS", { exact: true })).toHaveCount(0);
   expect(await heightOf(page.locator(".cm-editor"))).toBeGreaterThan(500);
 });
+
+const clippedButtons = (page: Page) =>
+  page.getByRole("main").evaluate((main) => {
+    const edge = main.getBoundingClientRect().right;
+    return [...main.querySelectorAll("button, select")]
+      .filter((control) => {
+        const { width, right } = control.getBoundingClientRect();
+        // The grid scrolls its own columns into view.
+        const scrolls = control.closest(".grid-scroll");
+        return width > 0 && right > edge + 1 && !scrolls;
+      })
+      .map((control) => control.textContent);
+  });
+
+test("every action stays reachable when the sidebar leaves main its minimum width", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await connect(page);
+  await page
+    .getByRole("complementary")
+    .getByRole("button", { name: "WorkItems", exact: true })
+    .click();
+  await expect(page.locator("tbody tr").first()).toBeVisible();
+  await page.getByRole("separator", { name: "Resize sidebar" }).focus();
+  await page.keyboard.press("End");
+  expect(await widthOf(page.getByRole("main"))).toBe(420);
+  expect(await clippedButtons(page)).toEqual([]);
+
+  await page
+    .getByRole("button", { name: "New query SQL", exact: true })
+    .click();
+  await page
+    .locator(".cm-content")
+    .fill("SELECT TOP (3) Id FROM dbo.WorkItems;");
+  await page.getByRole("button", { name: "Run SQL", exact: false }).click();
+  await expect(page.locator("tbody tr")).toHaveCount(3);
+  expect(await clippedButtons(page)).toEqual([]);
+  await expect(
+    page.getByRole("button", { name: "Next page" }),
+  ).toBeInViewport();
+});
+
+test("dragging away and back leaves the pane on its responsive default", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const sidebar = page.getByRole("complementary");
+  const splitter = page.getByRole("separator", { name: "Resize sidebar" });
+  const box = (await splitter.boundingBox())!;
+  const y = box.y + 100;
+  await page.mouse.move(box.x + 3, y);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 103, y, { steps: 3 });
+  await page.mouse.move(box.x + 3, y, { steps: 3 });
+  await page.mouse.up();
+  expect(await widthOf(sidebar)).toBe(250);
+  await page.setViewportSize({ width: 1000, height: 800 });
+  expect(await widthOf(sidebar)).toBe(218);
+});
+
+test("a banner appearing during a drag does not separate the divider from the pointer", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await connect(page);
+  await page
+    .getByRole("button", { name: "New query SQL", exact: true })
+    .click();
+  await page
+    .locator(".cm-content")
+    .fill("SELECT TOP (3) Id FROM dbo.WorkItems;");
+  await page.getByRole("button", { name: "Run SQL", exact: false }).click();
+  await expect(page.locator("tbody tr")).toHaveCount(3);
+
+  // A failed re-run keeps the old results and adds an error banner above them.
+  await page.locator(".cm-content").fill("SELECT * FROM dbo.DoesNotExist;");
+  const splitter = page.getByRole("separator", {
+    name: "Resize SQL editor and results",
+  });
+  const start = (await splitter.boundingBox())!;
+  const x = start.x + 400;
+  await page.mouse.move(x, start.y + 3);
+  await page.mouse.down();
+  await page.keyboard.press("Control+Enter");
+  await expect(page.getByRole("tabpanel").getByRole("alert")).toBeVisible();
+
+  const target = start.y + 3 + 150;
+  await page.mouse.move(x, target, { steps: 3 });
+  const moved = (await splitter.boundingBox())!;
+  await page.mouse.up();
+  expect(Math.abs(moved.y + moved.height / 2 - target)).toBeLessThanOrEqual(1);
+});

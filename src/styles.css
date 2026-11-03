@@ -813,12 +813,16 @@ main {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
   white-space: nowrap;
 }
 .keyboard-hint {
+  overflow: hidden;
+  min-width: 0;
   font-size: 9px;
   color: #74869e;
   margin-left: 12px;
+  text-overflow: ellipsis;
 }
 .status-bar button {
   padding: 3px 6px;
@@ -906,8 +910,21 @@ main {
   font-size: 11px;
 }
 .query-toolbar strong {
+  overflow: hidden;
   font-size: 12px;
   font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.query-toolbar {
+  flex-wrap: wrap;
+}
+.query-toolbar > div:first-child {
+  min-width: 0;
+}
+.query-toolbar > div:last-child {
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 .query-toolbar > div > .hint {
   font-size: 9px;
@@ -946,6 +963,7 @@ main {
 }
 .results-heading {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
   border-top: 1px solid var(--line);
