@@ -6,7 +6,7 @@ public sealed class WorkspaceStore(AppPaths paths)
 {
     private readonly string directory = Path.Combine(paths.Root, "workspace");
     private readonly object gate = new();
-    private string PathFor(string key) => key is "scratch" or "library" ? Path.Combine(directory, key + ".json") : throw new InputException("Unknown workspace document.");
+    private string PathFor(string key) => key is "scratch" or "library" or "settings" ? Path.Combine(directory, key + ".json") : throw new InputException("Unknown workspace document.");
     public JsonElement? Read(string key)
     {
         lock (gate)

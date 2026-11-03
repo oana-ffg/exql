@@ -12,7 +12,10 @@ declare global {
 }
 
 // Disk-backed workspace state is independent of the desktop host's randomly assigned port.
-export function useStored<T>(key: "scratch" | "library", fallback: T) {
+export function useStored<T>(
+  key: "scratch" | "library" | "settings",
+  fallback: T,
+) {
   const [value, setValue] = useState<T>(fallback);
   const latest = useRef(value);
   const [ready, setReady] = useState(false);

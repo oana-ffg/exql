@@ -149,6 +149,7 @@ it("keeps visible and hidden Workspace grids out of real CodeMirror typing and s
     vi.fn(async (path: string, init?: RequestInit) => {
       if (path.startsWith("/api/workspace/") && init?.method === "POST")
         return new Response(null, { status: 204 });
+      if (path === "/api/workspace/settings") return response({ value: null });
       if (path === "/api/workspace/scratch") return response({ value: drafts });
       if (path === "/api/workspace/library")
         return response({ value: library });
@@ -230,6 +231,7 @@ it("refreshes script listings on focus only for the visible scripts panel", asyn
     path: `C:\\scripts-${i}`,
   }));
   const fetch = vi.fn(async (path: string) => {
+    if (path === "/api/workspace/settings") return response({ value: null });
     if (path === "/api/workspace/scratch")
       return response({
         value: [
@@ -336,6 +338,8 @@ it("grid callbacks keep current rows, edits, filters, sort direction, and sessio
         onConnect: noop,
         onChooseConnection: noop,
         onActivity: noop,
+        onPaneResize: noop,
+        defaultTimeoutSeconds: 120,
       }),
     );
   }

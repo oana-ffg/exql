@@ -11,7 +11,7 @@ public sealed record GridResult(List<Column> Columns, List<string?[]> Rows, bool
 public sealed record CellChange(string Column, string? Value);
 public sealed record RowChange(Dictionary<string, string?> Original, List<CellChange> Changes);
 public sealed record EditRequest(string Schema, string Table, List<RowChange> Rows);
-public sealed record QueryRequest(string Sql);
+public sealed record QueryRequest(string Sql, int? TimeoutSeconds = null);
 public sealed record QueryResult(string Id, List<Column> Columns, long RowCount, GridResult Page);
 public sealed record QueryResponse(List<QueryResult> Results, long RecordsAffected, List<string> Messages, string? Error);
 public sealed record ExportRequest(TableRequest? Table, string? ResultId, string Format);

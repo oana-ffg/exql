@@ -5,13 +5,16 @@ import {
   useRef,
   useState,
 } from "react";
-import { Database, LoaderCircle, Plus, X } from "lucide-react";
+import { Database, LoaderCircle, Plus, Settings, X } from "lucide-react";
 import { useScriptFolders } from "./scriptFolders";
 import { request } from "./api";
 import { ConnectionDialog } from "./ConnectionDialog";
 import { UpdateNotice } from "./UpdateNotice";
 import { Workspace } from "./Workspace";
 import { useStored } from "./storage";
+import { applyPaneLayout, type Pane } from "./paneLayout";
+import { defaultSettings, type AppSettings } from "./settings";
+import { SettingsDialog } from "./SettingsDialog";
 import type { Connection, ConnectionProfile, Library, Session } from "./types";
 import {
   connectionColors,
@@ -61,6 +64,11 @@ export default function App() {
     "library",
     emptyLibrary,
   );
+  const [storedSettings, setSettings, settingsReady] = useStored<
+    Partial<AppSettings>
+  >("settings", {});
+  const settings = { ...defaultSettings, ...storedSettings };
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [sessions, setSessions] = useState<Record<string, Session | null>>({});
   const [activeId, setActiveId] = useState<string | null>(null);
   const [activity, setActivity] = useState<Record<string, Activity>>({});
@@ -77,7 +85,13 @@ export default function App() {
   const tabList = useRef<HTMLDivElement>(null);
   const drafts = draftsFrom(scratch);
   const active = drafts.find((draft) => draft.id === activeId) ?? drafts[0];
-  const ready = scratchReady && libraryReady;
+  const ready = scratchReady && libraryReady && settingsReady;
+  useLayoutEffect(
+    () => applyPaneLayout(settings),
+    [settings.sidebarWidth, settings.editorHeight],
+  );
+  const resizePane = (pane: Pane, size: number | null) =>
+    setSettings((current) => ({ ...current, [pane]: size }));
   useLayoutEffect(() => {
     const revealActiveTab = () =>
       activeTab.current?.parentElement?.scrollIntoView({
@@ -414,6 +428,14 @@ export default function App() {
           >
             <Plus size={15} /> Add connection
           </button>
+          <button
+            className="icon-button"
+            aria-label="Settings"
+            title="Settings"
+            onClick={() => setSettingsOpen(true)}
+          >
+            <Settings size={15} />
+          </button>
         </nav>
         <UpdateNotice />
       </header>
@@ -462,8 +484,19 @@ export default function App() {
           onConnect={() => connectTab(draft)}
           onChooseConnection={() => setConnectionDialog({ target: draft.id })}
           onActivity={reportActivity}
+          onPaneResize={resizePane}
+          defaultTimeoutSeconds={settings.scriptTimeoutSeconds}
         />
       ))}
+      {settingsOpen && (
+        <SettingsDialog
+          scriptTimeoutSeconds={settings.scriptTimeoutSeconds}
+          onScriptTimeout={(scriptTimeoutSeconds) =>
+            setSettings((current) => ({ ...current, scriptTimeoutSeconds }))
+          }
+          onClose={() => setSettingsOpen(false)}
+        />
+      )}
       {connectionDialog && (
         <ConnectionDialog
           busy={connecting}

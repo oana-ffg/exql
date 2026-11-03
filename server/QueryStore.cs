@@ -9,8 +9,13 @@ public static class QueryStore
 {
     public const int PageSize = 200;
     public const long MaxBytes = 256 * 1024 * 1024;
-    public static async Task<QueryResponse> Run(DatabaseSession session, SqlConnection connection, string sql, CancellationToken ct)
+    public const int DefaultTimeoutSeconds = 120;
+    // Zero is SqlCommand's "no limit".
+    private const int MaxTimeoutSeconds = 86_400;
+    private const int SqlClientTimeoutNumber = -2;
+    public static async Task<QueryResponse> Run(DatabaseSession session, SqlConnection connection, string sql, int timeoutSeconds, CancellationToken ct)
     {
+        if (timeoutSeconds is < 0 or > MaxTimeoutSeconds) throw new InputException("The script timeout must be at most 24 hours, or no limit.");
         // A request that omits the text binds null despite the non-nullable model property.
         List<SqlBatch> batches = string.IsNullOrWhiteSpace(sql) ? [] : SqlBatches.Split(sql);
         if (batches.Count == 0) throw new InputException("Enter SQL to run.");
@@ -29,7 +34,7 @@ public static class QueryStore
                 for (var batchIndex = 0; batchIndex < batches.Count; batchIndex++)
                 {
                     var batch = batches[batchIndex];
-                    await using var command = new SqlCommand(batch.Text, connection) { CommandTimeout = 120 };
+                    await using var command = new SqlCommand(batch.Text, connection) { CommandTimeout = timeoutSeconds };
                     for (var repetition = 0; repetition < batch.RepeatCount; repetition++)
                     {
                         ct.ThrowIfCancellationRequested();
@@ -57,10 +62,16 @@ public static class QueryStore
                                 if (reader.RecordsAffected >= 0) affected = Math.Max(0, affected) + reader.RecordsAffected;
                             }
                         }
-                        catch (SqlException error) when ((batches.Count > 1 || batch.RepeatCount > 1) && !ct.IsCancellationRequested)
+                        catch (SqlException error) when ((error.Number == SqlClientTimeoutNumber || batches.Count > 1 || batch.RepeatCount > 1) && !ct.IsCancellationRequested)
                         {
+                            var cause = error.Number == SqlClientTimeoutNumber
+                                ? $"The batch timed out after {timeoutSeconds} sec. Choose a longer Timeout next to Run SQL to give it more time."
+                                : $"SQL Server error: {error.Message}";
                             var repeat = batch.RepeatCount > 1 ? $" (execution {repetition + 1} of {batch.RepeatCount})" : "";
-                            throw new InputException($"Stopped at batch {batchIndex + 1} of {batches.Count}{repeat}, {batch.ErrorLocation(error.LineNumber, error.Procedure)}. Any changes committed before the error remain. SQL Server error: {error.Message}", innerException: error);
+                            var stopped = batches.Count > 1 || batch.RepeatCount > 1
+                                ? $"Stopped at batch {batchIndex + 1} of {batches.Count}{repeat}, {batch.ErrorLocation(error.LineNumber, error.Procedure)}."
+                                : "Stopped.";
+                            throw new InputException($"{stopped} Any changes committed before the error remain. {cause}", innerException: error);
                         }
                     }
                 }

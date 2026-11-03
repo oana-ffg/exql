@@ -12,7 +12,7 @@ const library = {
   ],
 };
 
-test("waits for both workspace documents before enabling edits", async ({
+test("waits for every workspace document before enabling edits", async ({
   page,
 }) => {
   const pending: (() => void)[] = [];
@@ -35,11 +35,12 @@ test("waits for both workspace documents before enabling edits", async ({
   });
   await page.goto("/");
   await expect(page.getByRole("status")).toHaveText("Loading saved workspace…");
-  await expect.poll(() => pending.length).toBe(2);
+  await expect.poll(() => pending.length).toBe(3);
   expect(await page.evaluate(() => window.exqlWorkspaceReady)).toBe(false);
   await expect(page.locator(".cm-content")).toHaveCount(0);
   expect(writes).toEqual([]);
 
+  pending.shift()!();
   pending.shift()!();
   await expect(page.getByRole("status")).toBeVisible();
   pending.shift()!();
