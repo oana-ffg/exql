@@ -30,7 +30,9 @@ public sealed class ExqlHostTests : IDisposable
     [Fact]
     public async Task DesktopHostIgnoresTheDevHostPort()
     {
-        var port = FreePort();
+        using var occupied = new TcpListener(IPAddress.Loopback, 0);
+        occupied.Start();
+        var port = ((IPEndPoint)occupied.LocalEndpoint).Port;
         await using var host = ExqlHost.Build(["--DataDirectory", dataDirectory, "--DevHostPort", port.ToString()], desktop: true, "token");
 
         await host.StartAsync();
