@@ -12,6 +12,8 @@ const child = spawn(
     "--",
     "--DataDirectory",
     process.env.EXQL_TEST_DATA_DIRECTORY,
+    "--DevHostPort",
+    process.env.EXQL_TEST_PORT,
   ],
   { stdio: ["ignore", "pipe", "pipe"], windowsHide: true },
 );
