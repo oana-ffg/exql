@@ -50,6 +50,41 @@ public static class Database
         return columns;
     }
 
+    public static async Task<List<ForeignKey>> ForeignKeys(SqlConnection connection, string schema, string table, CancellationToken ct)
+    {
+        const string sql = """
+            SELECT fk.object_id, rs.name, rt.name, pc.name, rc.name
+            FROM sys.foreign_keys fk
+            JOIN sys.objects pt ON pt.object_id=fk.parent_object_id
+            JOIN sys.schemas ps ON ps.schema_id=pt.schema_id
+            JOIN sys.objects rt ON rt.object_id=fk.referenced_object_id
+            JOIN sys.schemas rs ON rs.schema_id=rt.schema_id
+            JOIN sys.foreign_key_columns fkc ON fkc.constraint_object_id=fk.object_id
+            JOIN sys.columns pc ON pc.object_id=fkc.parent_object_id AND pc.column_id=fkc.parent_column_id
+            JOIN sys.columns rc ON rc.object_id=fkc.referenced_object_id AND rc.column_id=fkc.referenced_column_id
+            WHERE ps.name=@schema AND pt.name=@table
+            ORDER BY rs.name, rt.name, fk.object_id, fkc.constraint_column_id
+            """;
+        await using var command = new SqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@schema", schema);
+        command.Parameters.AddWithValue("@table", table);
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        List<ForeignKey> keys = [];
+        int? current = null;
+        while (await reader.ReadAsync(ct))
+        {
+            var id = reader.GetInt32(0);
+            if (id != current)
+            {
+                keys.Add(new(reader.GetString(1), reader.GetString(2), []));
+                current = id;
+            }
+            keys[^1].Columns.Add(new(reader.GetString(3), reader.GetString(4)));
+        }
+        // SQL Server allows duplicate constraints; they lead to the same rows.
+        return keys.DistinctBy(key => (key.ReferencedSchema, key.ReferencedTable, string.Join('\0', key.Columns))).ToList();
+    }
+
     public static string Parameter(SqlCommand command, Column column, string? value)
     {
         var name = "@p" + command.Parameters.Count;
@@ -121,13 +156,14 @@ public static class Database
     public static async Task<GridResult> Page(SqlConnection connection, TableRequest request, CancellationToken ct)
     {
         var columns = await Columns(connection, request.Schema, request.Table, ct);
+        var foreignKeys = await ForeignKeys(connection, request.Schema, request.Table, ct);
         await using var command = Select(connection, request, columns, true);
         await using var reader = await command.ExecuteReaderAsync(ct);
         List<string?[]> rows = [];
         while (await reader.ReadAsync(ct)) rows.Add(SqlValues.ReadRow(reader));
         var more = rows.Count > request.Limit;
         if (more) rows.RemoveAt(rows.Count - 1);
-        return new(columns, rows, more);
+        return new(columns, rows, more, ForeignKeys: foreignKeys);
     }
 
     public static async Task Edit(SqlConnection connection, EditRequest request, CancellationToken ct)

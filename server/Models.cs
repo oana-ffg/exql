@@ -7,7 +7,9 @@ public sealed record Column(string Name, string Type, bool Nullable, bool Primar
 public sealed record Filter(string Column, string Operator, string? Value);
 public sealed record TableRequest(string Schema, string Table, List<Filter> Filters, string Match = "all",
     string? Sort = null, bool Descending = false, int Offset = 0, int Limit = 200);
-public sealed record GridResult(List<Column> Columns, List<string?[]> Rows, bool HasMore, long? Total = null);
+public sealed record ForeignKeyColumn(string Column, string ReferencedColumn);
+public sealed record ForeignKey(string ReferencedSchema, string ReferencedTable, List<ForeignKeyColumn> Columns);
+public sealed record GridResult(List<Column> Columns, List<string?[]> Rows, bool HasMore, long? Total = null, List<ForeignKey>? ForeignKeys = null);
 public sealed record CellChange(string Column, string? Value);
 public sealed record RowChange(Dictionary<string, string?> Original, List<CellChange> Changes);
 public sealed record EditRequest(string Schema, string Table, List<RowChange> Rows);

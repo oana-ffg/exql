@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type KeyboardEvent } from "react";
 import { ArrowRight, Database, Folder, Plus, ShieldCheck } from "lucide-react";
 import { ContextMenu, useContextMenu } from "./ContextMenu";
 import { Modal } from "./Modal";
@@ -9,6 +9,7 @@ import {
   connectionColorStyle,
   nextConnectionColor,
 } from "./connectionColors";
+import { moveById, useDragReorder, type DropSide } from "./reorder";
 
 const defaults: Connection = {
   server: "localhost",
@@ -118,6 +119,42 @@ export function ConnectionDialog({
       setPending(false);
     }
   }
+  function moveProfile(profileId: string, targetId: string, side: DropSide) {
+    const previous = profiles;
+    const next = moveById(profiles, profileId, targetId, side);
+    setProfiles(next);
+    setError("");
+    request("/profiles/order", { ids: next.map((item) => item.id) }).catch(
+      (error: Error) => {
+        // Going back keeps the list showing what is actually saved.
+        setProfiles(previous);
+        setError(`Could not save the new order: ${error.message}`);
+      },
+    );
+  }
+  const profileDrag = useDragReorder({
+    axis: "y",
+    canDrop: (profileId, targetId) =>
+      profiles.find((item) => item.id === profileId)?.folder ===
+      profiles.find((item) => item.id === targetId)?.folder,
+    onMove: moveProfile,
+  });
+  function moveProfileByKey(
+    profile: ConnectionProfile,
+    event: KeyboardEvent<HTMLElement>,
+  ) {
+    if (
+      !event.shiftKey ||
+      disabled ||
+      (event.key !== "ArrowUp" && event.key !== "ArrowDown")
+    )
+      return;
+    event.preventDefault();
+    const siblings = profiles.filter((item) => item.folder === profile.folder);
+    const up = event.key === "ArrowUp";
+    const target = siblings[siblings.indexOf(profile) + (up ? -1 : 1)];
+    if (target) moveProfile(profile.id, target.id, up ? "before" : "after");
+  }
   async function connectSaved(profile: ConnectionProfile) {
     setError("");
     try {
@@ -136,10 +173,11 @@ export function ConnectionDialog({
       credentialSourceId: cloneSource?.id,
       color: selectedColor,
     });
-    setProfiles((current) => [
-      ...current.filter((item) => item.id !== profile.id),
-      profile,
-    ]);
+    setProfiles((current) =>
+      current.some((item) => item.id === profile.id)
+        ? current.map((item) => (item.id === profile.id ? profile : item))
+        : [...current, profile],
+    );
     setId(profile.id);
     setCloneSource(null);
     setColor(profile.color);
@@ -181,33 +219,41 @@ export function ConnectionDialog({
                   </div>
                   {profiles
                     .filter((profile) => profile.folder === group)
-                    .map((profile) => (
-                      <div
-                        className={`profile-row ${id === profile.id ? "active" : ""}`}
-                        style={connectionColorStyle(profile.color)}
-                        key={profile.id}
-                        tabIndex={0}
-                        {...context.bind(profile)}
-                      >
-                        <button
-                          type="button"
-                          disabled={disabled}
-                          aria-label={`Connect to ${profile.name}`}
-                          title={`Connect to ${profile.name}. Right-click for more.`}
-                          className="profile-select"
-                          onClick={() => void connectSaved(profile)}
+                    .map((profile) => {
+                      const menu = context.bind(profile);
+                      return (
+                        <div
+                          className={`profile-row ${id === profile.id ? "active" : ""}`}
+                          style={connectionColorStyle(profile.color)}
+                          key={profile.id}
+                          tabIndex={0}
+                          {...profileDrag.bind(profile.id, !disabled)}
+                          onContextMenu={menu.onContextMenu}
+                          onKeyDown={(event) => {
+                            moveProfileByKey(profile, event);
+                            menu.onKeyDown(event);
+                          }}
                         >
-                          <Database size={14} />
-                          <span>
-                            <strong>{profile.name}</strong>
-                            <small>
-                              {profile.connection.server} /{" "}
-                              {profile.connection.database}
-                            </small>
-                          </span>
-                        </button>
-                      </div>
-                    ))}
+                          <button
+                            type="button"
+                            disabled={disabled}
+                            aria-label={`Connect to ${profile.name}`}
+                            title={`Connect to ${profile.name}. Right-click for more.`}
+                            className="profile-select"
+                            onClick={() => void connectSaved(profile)}
+                          >
+                            <Database size={14} />
+                            <span>
+                              <strong>{profile.name}</strong>
+                              <small>
+                                {profile.connection.server} /{" "}
+                                {profile.connection.database}
+                              </small>
+                            </span>
+                          </button>
+                        </div>
+                      );
+                    })}
                 </div>
               ))}
           </div>

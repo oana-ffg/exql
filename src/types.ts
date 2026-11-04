@@ -12,11 +12,18 @@ export interface TableId {
   name: string;
   kind: "table" | "view";
 }
+export interface ForeignKey {
+  referencedSchema: string;
+  referencedTable: string;
+  columns: { column: string; referencedColumn: string }[];
+}
 export interface GridResult {
   columns: Column[];
   rows: Cell[][];
   hasMore: boolean;
   total: number | null;
+  // Only table pages have them; a query result's columns are not tied to a table.
+  foreignKeys?: ForeignKey[] | null;
 }
 export interface Filter {
   column: string;

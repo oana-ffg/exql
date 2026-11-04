@@ -5,8 +5,23 @@ import {
   type ClipboardEvent,
   type KeyboardEvent,
 } from "react";
-import { Check, ChevronDown, Copy, KeyRound, LockKeyhole } from "lucide-react";
-import type { Cell, Column, Edit, Filter, GridResult, TableId } from "./types";
+import {
+  ArrowRight,
+  Check,
+  ChevronDown,
+  Copy,
+  KeyRound,
+  LockKeyhole,
+} from "lucide-react";
+import type {
+  Cell,
+  Column,
+  Edit,
+  Filter,
+  ForeignKey,
+  GridResult,
+  TableId,
+} from "./types";
 import {
   csvRows,
   jsonRows,
@@ -22,7 +37,11 @@ type Position = { row: number; col: number };
 type GridMenu =
   | { kind: "cell"; position: Position }
   | { kind: "row"; row: number }
-  | { kind: "column"; col: number };
+  | { kind: "column"; col: number }
+  | { kind: "keys"; position: Position };
+const noKeys: ForeignKey[] = [];
+const keyLabel = (key: ForeignKey) =>
+  `Go to ${key.referencedSchema}.${key.referencedTable} (${key.columns.map((column) => column.column).join(", ")})`;
 export const DataGrid = memo(function DataGrid({
   data,
   table,
@@ -32,6 +51,7 @@ export const DataGrid = memo(function DataGrid({
   descending,
   onSort,
   onFilter,
+  onFollowKey,
   onNotice,
   disabled,
 }: {
@@ -43,6 +63,7 @@ export const DataGrid = memo(function DataGrid({
   descending: boolean;
   onSort: (column: string, descending?: boolean) => void;
   onFilter: (filter: Filter) => void;
+  onFollowKey: (key: ForeignKey, values: string[]) => void;
   onNotice: (notice: string) => void;
   disabled: boolean;
 }) {
@@ -104,6 +125,31 @@ export const DataGrid = memo(function DataGrid({
     const edit = editAt(row, data.columns[col].name);
     return edit ? edit.value : data.rows[row][col];
   };
+  const keysByColumn = useMemo(() => {
+    const index = new Map<string, ForeignKey[]>();
+    if (table)
+      for (const key of data.foreignKeys ?? noKeys)
+        for (const { column } of key.columns)
+          index.set(column, [...(index.get(column) ?? []), key]);
+    return index;
+  }, [data.foreignKeys, table]);
+  const columnIndex = useMemo(
+    () => new Map(data.columns.map((column, col) => [column.name, col])),
+    [data.columns],
+  );
+  function followableKeys({ row, col }: Position) {
+    return (keysByColumn.get(data.columns[col].name) ?? noKeys).flatMap(
+      (key) => {
+        const values = key.columns.map(({ column }) =>
+          valueAt(row, columnIndex.get(column)!),
+        );
+        // With a NULL in it, a foreign key references nothing.
+        return values.includes(null)
+          ? []
+          : [{ key, values: values as string[] }];
+      },
+    );
+  }
   const indices = selected.size
     ? [...selected].sort((a, b) => a - b)
     : data.rows.length
@@ -231,6 +277,12 @@ export const DataGrid = memo(function DataGrid({
     }
   }
   function menuActions(target: GridMenu): MenuAction[] {
+    if (target.kind === "keys")
+      return followableKeys(target.position).map(({ key, values }) => ({
+        label: keyLabel(key),
+        disabled,
+        run: () => onFollowKey(key, values),
+      }));
     if (target.kind === "column") {
       const column = data.columns[target.col];
       return [
@@ -324,6 +376,12 @@ export const DataGrid = memo(function DataGrid({
               value: value ?? "",
             }),
         },
+        ...followableKeys(target.position).map(({ key, values }, index) => ({
+          label: keyLabel(key),
+          separator: index === 0,
+          disabled,
+          run: () => onFollowKey(key, values),
+        })),
       );
     }
     return actions;
@@ -464,6 +522,9 @@ export const DataGrid = memo(function DataGrid({
                   const value = valueAt(row, col);
                   const isInRange = inRange(row, col);
                   const changed = !!editAt(row, column.name);
+                  const keys = keysByColumn.has(column.name)
+                    ? followableKeys({ row, col })
+                    : [];
                   return (
                     <td
                       key={column.name}
@@ -471,7 +532,7 @@ export const DataGrid = memo(function DataGrid({
                       aria-selected={isInRange || selected.has(row)}
                       tabIndex={-1}
                       data-cell={`${row}:${col}`}
-                      className={`${isInRange ? "range-cell" : ""} ${active.row === row && active.col === col ? "active-cell" : ""} ${changed ? "edited-cell" : ""} ${value === null ? "null-cell" : ""}`}
+                      className={`${isInRange ? "range-cell" : ""} ${active.row === row && active.col === col ? "active-cell" : ""} ${changed ? "edited-cell" : ""} ${value === null ? "null-cell" : ""} ${keys.length ? "key-cell" : ""}`}
                       {...menuBindings({
                         kind: "cell",
                         position: { row, col },
@@ -494,6 +555,37 @@ export const DataGrid = memo(function DataGrid({
                           value
                         )}
                       </span>
+                      {keys.length > 0 && (
+                        <button
+                          type="button"
+                          className="key-link"
+                          tabIndex={-1}
+                          disabled={disabled}
+                          aria-label={
+                            keys.length === 1
+                              ? keyLabel(keys[0].key)
+                              : `Choose from ${keys.length} referenced tables`
+                          }
+                          title={keys
+                            .map(({ key }) => keyLabel(key))
+                            .join("\n")}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            if (keys.length === 1)
+                              onFollowKey(keys[0].key, keys[0].values);
+                            else
+                              context
+                                .bind({
+                                  kind: "keys",
+                                  position: { row, col },
+                                })
+                                .onContextMenu(event);
+                          }}
+                          onDoubleClick={(event) => event.stopPropagation()}
+                        >
+                          <ArrowRight size={12} />
+                        </button>
+                      )}
                     </td>
                   );
                 })}
@@ -513,7 +605,9 @@ export const DataGrid = memo(function DataGrid({
               ? data.columns[context.menu.target.col].name
               : context.menu.target.kind === "row"
                 ? "Row actions"
-                : "Cell actions"
+                : context.menu.target.kind === "keys"
+                  ? "Referenced tables"
+                  : "Cell actions"
           }
           actions={menuActions(context.menu.target)}
           onClose={context.close}

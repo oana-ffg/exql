@@ -40,6 +40,7 @@ it("indexes staged edits once rather than scanning them for every rendered cell"
       onEdit: vi.fn(),
       onSort: vi.fn(),
       onFilter: vi.fn(),
+      onFollowKey: vi.fn(),
       onNotice: vi.fn(),
     }),
   );

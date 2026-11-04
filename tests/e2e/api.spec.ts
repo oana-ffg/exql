@@ -53,6 +53,39 @@ async function query(sql: string): Promise<QueryResponse> {
   expect(response.ok(), await response.text()).toBeTruthy();
   return response.json();
 }
+test("table pages describe their foreign keys, including composite ones", async () => {
+  const assignments = await page({
+    ...tableRequest(),
+    table: "Assignments",
+    sort: null,
+  });
+  expect(assignments.foreignKeys).toEqual(
+    expect.arrayContaining([
+      {
+        referencedSchema: "dbo",
+        referencedTable: "WorkItems",
+        columns: [{ column: "WorkItemId", referencedColumn: "Id" }],
+      },
+      {
+        referencedSchema: "ref",
+        referencedTable: "Countries",
+        columns: [{ column: "Country", referencedColumn: "Code" }],
+      },
+      {
+        referencedSchema: "dbo",
+        referencedTable: "Regions",
+        columns: [
+          { column: "Country", referencedColumn: "Country" },
+          { column: "RegionCode", referencedColumn: "Code" },
+        ],
+      },
+    ]),
+  );
+  expect(assignments.foreignKeys).toHaveLength(3);
+  expect((await page({ ...tableRequest(), sort: null })).foreignKeys).toEqual(
+    [],
+  );
+});
 test("real catalog, pagination and complete table exports", async () => {
   expect(session.catalog).toEqual(
     expect.arrayContaining([

@@ -45,6 +45,7 @@ import { formatElapsed, resultsText } from "./format";
 import type {
   Edit,
   Filter,
+  ForeignKey,
   GridResult,
   Library,
   QueryResponse,
@@ -55,6 +56,17 @@ import type {
 } from "./types";
 
 const noEdits: Edit[] = [];
+const defaultPage = {
+  match: "all",
+  sort: null,
+  descending: false,
+  offset: 0,
+  limit: 200,
+} as const;
+interface TableView {
+  table: TableId;
+  request: TableRequest;
+}
 
 const SqlEditor = lazy(() =>
   import("./SqlEditor").then((module) => ({ default: module.SqlEditor })),
@@ -104,6 +116,8 @@ export function Workspace({
   const [table, setTable] = useState<TableId | null>(null);
   const [tableData, setTableData] = useState<GridResult | null>(null);
   const [tableRequest, setTableRequest] = useState<TableRequest | null>(null);
+  // Where to return to after following foreign keys.
+  const [tableTrail, setTableTrail] = useState<TableView[]>([]);
   const [filters, setFilters] = useState<Filter[]>([]);
   const [match, setMatch] = useState<"all" | "any">("all");
   const [edits, setEdits] = useState<Edit[]>([]);
@@ -225,7 +239,7 @@ export function Workspace({
     return true;
   }, [edits]);
   const loadTable = useCallback(
-    async (next: TableRequest, nextTable = table!) => {
+    async (next: TableRequest, nextTable = table!, trail?: TableView[]) => {
       if (!session || !discardEdits()) return;
       await perform("Loading table", async (signal) => {
         const page = await request<GridResult>(
@@ -239,6 +253,7 @@ export function Workspace({
         setFilters(next.filters);
         setMatch(next.match);
         setMode("table");
+        if (trail) setTableTrail(trail);
         setGeneration((value) => value + 1);
       });
     },
@@ -279,21 +294,38 @@ export function Workspace({
     setNotice("Filter added. Click Apply filters to update the view.");
   }, []);
 
+  const followForeignKey = useCallback(
+    (key: ForeignKey, values: string[]) => {
+      if (!table || !tableRequest) return;
+      void loadTable(
+        {
+          ...defaultPage,
+          schema: key.referencedSchema,
+          table: key.referencedTable,
+          filters: key.columns.map(({ referencedColumn }, index) => ({
+            column: referencedColumn,
+            operator: "=",
+            value: values[index],
+          })),
+        },
+        {
+          schema: key.referencedSchema,
+          name: key.referencedTable,
+          kind: "table",
+        },
+        [...tableTrail, { table, request: tableRequest }],
+      );
+    },
+    [table, tableRequest, tableTrail, loadTable],
+  );
   async function openTable(next: TableId) {
     await loadTable(
-      {
-        schema: next.schema,
-        table: next.name,
-        filters: [],
-        match: "all",
-        sort: null,
-        descending: false,
-        offset: 0,
-        limit: 200,
-      },
+      { ...defaultPage, schema: next.schema, table: next.name, filters: [] },
       next,
+      [],
     );
   }
+  const previousTable = tableTrail.at(-1);
   function openQuery(query?: SavedQuery, initialSql = "") {
     if (!discardEdits()) return;
     setMode("query");
@@ -497,6 +529,7 @@ export function Workspace({
       descending={tableRequest?.descending ?? false}
       onSort={sortColumn}
       onFilter={addFilter}
+      onFollowKey={followForeignKey}
       onNotice={setNotice}
       disabled={!!busy}
     />
@@ -625,6 +658,7 @@ export function Workspace({
                         "DELETE",
                       );
                       onSession(null);
+                      setTableTrail([]);
                       setTable(null);
                       setTableData(null);
                       setQueryData(null);
@@ -721,6 +755,15 @@ export function Workspace({
                     disabled={!!busy}
                   />
                 </label>
+                {session && (
+                  <span
+                    className="run-target"
+                    title={`Runs on ${session.database} · ${session.server}`}
+                  >
+                    <span className="run-target-swatch" />
+                    {session.name}
+                  </span>
+                )}
                 <button
                   className="primary"
                   disabled={!session || !!busy || !(selection || sql).trim()}
@@ -834,6 +877,21 @@ export function Workspace({
                     <span className="tag">{table.kind}</span>
                   </div>
                   <div>
+                    {previousTable && (
+                      <button
+                        disabled={!!busy}
+                        onClick={() =>
+                          void loadTable(
+                            previousTable.request,
+                            previousTable.table,
+                            tableTrail.slice(0, -1),
+                          )
+                        }
+                      >
+                        <ArrowLeft size={14} />
+                        Back to {previousTable.table.name}
+                      </button>
+                    )}
                     <button
                       disabled={!!busy}
                       onClick={() => tableRequest && loadTable(tableRequest)}

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   connectionColors,
+  connectionInk,
   nextConnectionColor,
 } from "../../src/connectionColors";
 
@@ -19,5 +20,13 @@ describe("connection colors", () => {
     expect(nextConnectionColor(["#123456", null, undefined])).toBe(
       connectionColors[0].value,
     );
+  });
+
+  it("picks readable text for a solid connection color", () => {
+    expect(connectionInk("#8ed6ae")).toBe("#10151c");
+    expect(connectionInk("#f6d27a")).toBe("#10151c");
+    expect(connectionInk("#bd4545")).toBe("#ffffff");
+    expect(connectionInk("#000000")).toBe("#ffffff");
+    expect(connectionInk("#ffffff")).toBe("#10151c");
   });
 });
