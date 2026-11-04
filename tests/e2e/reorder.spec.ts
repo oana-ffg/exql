@@ -74,7 +74,6 @@ test("dragging saved connections reorders them within their folder", async ({
   page,
   request,
 }) => {
-  const ids: Record<string, string> = {};
   for (const [name, folder] of [
     ["Alpha", ""],
     ["Bravo", ""],
@@ -85,7 +84,6 @@ test("dragging saved connections reorders them within their folder", async ({
       data: { name, folder, connection },
     });
     expect(response.ok(), await response.text()).toBe(true);
-    ids[name] = (await response.json()).id;
   }
   const savedOrder = async () =>
     (await (await request.get("/api/profiles")).json()).map(
@@ -133,8 +131,17 @@ test("dragging saved connections reorders them within their folder", async ({
     .getByRole("button", { name: "Connect to Charlie", exact: true })
     .click({ button: "right" });
   await page.getByRole("menuitem", { name: "Edit", exact: true }).click();
+  const saved = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/profiles") &&
+      response.request().method() === "POST",
+  );
   await page.getByRole("button", { name: "Save only", exact: true }).click();
-  await expect(page.locator(".profile-row.active")).toContainText("Charlie");
+  expect((await saved).ok()).toBe(true);
+  // The form stays disabled until the save has fully finished.
+  await expect(
+    page.getByRole("button", { name: "Save only", exact: true }),
+  ).toBeEnabled();
   expect(await profileNames(page)).toEqual([
     "Charlie",
     "Bravo",
@@ -199,7 +206,7 @@ test("the top bar and active tab take the open connection's color", async ({
   await page.getByRole("tab", { name: "Light", exact: true }).click();
   await expect.poll(toolbar).toBe("rgb(142, 214, 174)");
   expect(await activeTab()).toBe("rgb(142, 214, 174)");
-  expect(await activeText()).toBe("rgb(16, 21, 28)");
+  expect(await activeText()).toBe("rgb(0, 0, 0)");
 
   const panel = page.getByRole("tabpanel");
   await panel

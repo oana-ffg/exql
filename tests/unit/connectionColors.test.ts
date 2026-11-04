@@ -23,10 +23,10 @@ describe("connection colors", () => {
   });
 
   it("picks readable text for a solid connection color", () => {
-    expect(connectionInk("#8ed6ae")).toBe("#10151c");
-    expect(connectionInk("#f6d27a")).toBe("#10151c");
+    expect(connectionInk("#8ed6ae")).toBe("#000000");
+    expect(connectionInk("#39875b")).toBe("#000000");
     expect(connectionInk("#bd4545")).toBe("#ffffff");
     expect(connectionInk("#000000")).toBe("#ffffff");
-    expect(connectionInk("#ffffff")).toBe("#10151c");
+    expect(connectionInk("#ffffff")).toBe("#000000");
   });
 });

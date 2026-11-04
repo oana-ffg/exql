@@ -31,7 +31,8 @@ public static class Database
                 ON ic.object_id=i.object_id AND ic.index_id=i.index_id
                 WHERE i.object_id=c.object_id AND i.is_primary_key=1 AND ic.column_id=c.column_id) THEN 1 ELSE 0 END AS bit),
               CAST(CASE WHEN c.is_identity=1 OR c.is_computed=1 OR c.generated_always_type<>0 OR o.type='V' THEN 0 ELSE 1 END AS bit),
-              CAST(CASE WHEN c.is_identity=1 OR c.is_computed=1 OR c.generated_always_type<>0 OR c.system_type_id=189 THEN 1 ELSE 0 END AS bit)
+              CAST(CASE WHEN c.is_identity=1 OR c.is_computed=1 OR c.generated_always_type<>0 OR c.system_type_id=189 THEN 1 ELSE 0 END AS bit),
+              c.collation_name
             FROM sys.columns c JOIN sys.objects o ON o.object_id=c.object_id JOIN sys.schemas s ON s.schema_id=o.schema_id
             WHERE s.name=@schema AND o.name=@table AND o.type IN ('U','V') ORDER BY c.column_id
             """;
@@ -43,7 +44,7 @@ public static class Database
         while (await reader.ReadAsync(ct))
         {
             var type = reader.GetString(1);
-            columns.Add(new(reader.GetString(0), type, reader.GetBoolean(2), reader.GetBoolean(3), reader.GetBoolean(4) && EditableTypes.Contains(type), reader.GetBoolean(5)));
+            columns.Add(new(reader.GetString(0), type, reader.GetBoolean(2), reader.GetBoolean(3), reader.GetBoolean(4) && EditableTypes.Contains(type), reader.GetBoolean(5), reader.IsDBNull(6) ? null : reader.GetString(6)));
         }
         if (columns.Count == 0) throw new InputException("Table or view was not found, or is not accessible.", 404);
         if (!columns.Any(c => c.PrimaryKey)) return columns.Select(c => c with { Editable = false }).ToList();
@@ -63,6 +64,10 @@ public static class Database
             JOIN sys.columns pc ON pc.object_id=fkc.parent_object_id AND pc.column_id=fkc.parent_column_id
             JOIN sys.columns rc ON rc.object_id=fkc.referenced_object_id AND rc.column_id=fkc.referenced_column_id
             WHERE ps.name=@schema AND pt.name=@table
+              -- A sql_variant value loses its base type as text, so a filter could not find its row.
+              AND NOT EXISTS (SELECT 1 FROM sys.foreign_key_columns v
+                JOIN sys.columns vc ON vc.object_id=v.parent_object_id AND vc.column_id=v.parent_column_id
+                WHERE v.constraint_object_id=fk.object_id AND vc.system_type_id=98)
             ORDER BY rs.name, rt.name, fk.object_id, fkc.constraint_column_id
             """;
         await using var command = new SqlCommand(sql, connection);
@@ -90,7 +95,8 @@ public static class Database
         var name = "@p" + command.Parameters.Count;
         command.Parameters.Add(name, SqlDbType.NVarChar, -1).Value = (object?)value ?? DBNull.Value;
         // Types are trusted system metadata, never user-supplied SQL. Conversion happens on the parameter,
-        // preserving both exact numeric values and usable indexes on the column.
+        // preserving both exact numeric values and usable indexes on the column. Converting under the
+        // column's collation (also system metadata) keeps characters the database default cannot encode.
         var type = column.Type switch
         {
             "decimal" or "numeric" => null, // SQL implicit conversion uses the column's exact precision/scale.
@@ -108,7 +114,8 @@ public static class Database
             if (value is not ("true" or "false" or "1" or "0")) throw new InputException("Bit values must be true, false, 1, or 0.");
             command.Parameters[name].Value = value is "true" or "1" ? "1" : "0";
         }
-        return type is null ? name : $"CONVERT({type}, {name}{(type == "varbinary(max)" ? ", 1" : "")})";
+        var collated = type == "varchar(max)" && column.Collation is { } collation ? $"{name} COLLATE {collation}" : name;
+        return type is null ? name : $"CONVERT({type}, {collated}{(type == "varbinary(max)" ? ", 1" : "")})";
     }
 
     public static SqlCommand Select(SqlConnection connection, TableRequest request, List<Column> columns, bool paginate)

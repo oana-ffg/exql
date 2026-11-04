@@ -86,6 +86,52 @@ test("table pages describe their foreign keys, including composite ones", async 
     [],
   );
 });
+test("a sql_variant key offers no navigation, because text cannot find its row", async () => {
+  await query(`
+    CREATE TABLE dbo.VariantParents (Id sql_variant NOT NULL PRIMARY KEY);
+    CREATE TABLE dbo.VariantChildren (
+      Id int NOT NULL PRIMARY KEY,
+      ParentId sql_variant NULL REFERENCES dbo.VariantParents(Id)
+    );`);
+  const children = await page({
+    ...tableRequest("VariantChildren"),
+    sort: null,
+  });
+  expect(children.foreignKeys).toEqual([]);
+});
+test("text filters and edits keep characters the database default cannot encode", async () => {
+  // A UTF-8 column holds these, but the database default's code page may not.
+  await query(`
+    CREATE TABLE dbo.CollatedKeys (
+      Id int NOT NULL PRIMARY KEY,
+      Code varchar(20) COLLATE Latin1_General_100_CI_AS_SC_UTF8 NOT NULL
+    );
+    INSERT dbo.CollatedKeys VALUES (1, N'\u6f22\u5b57'), (2, N'??');`);
+  const request = tableRequest("CollatedKeys");
+  const found = await page({
+    ...request,
+    filters: [{ column: "Code", operator: "=", value: "\u6f22\u5b57" }],
+  });
+  expect(found.rows).toEqual([["1", "\u6f22\u5b57"]]);
+  const edit = await api.post(url("/edit"), {
+    data: {
+      schema: "dbo",
+      table: "CollatedKeys",
+      rows: [
+        {
+          original: { Id: "2", Code: "??" },
+          changes: [{ column: "Code", value: "\u03b1\u03b2" }],
+        },
+      ],
+    },
+  });
+  expect(edit.ok(), await edit.text()).toBe(true);
+  const saved = await page({
+    ...request,
+    filters: [{ column: "Id", operator: "=", value: "2" }],
+  });
+  expect(saved.rows).toEqual([["2", "\u03b1\u03b2"]]);
+});
 test("real catalog, pagination and complete table exports", async () => {
   expect(session.catalog).toEqual(
     expect.arrayContaining([

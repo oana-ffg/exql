@@ -23,16 +23,12 @@ const relativeLuminance = (color: string) => {
   });
   return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
 };
-const darkInk = "#10151c";
-const lightInk = "#ffffff";
-
-/** Whichever text color has the higher WCAG contrast on a solid connection color. */
+/** Black or white, whichever has the higher WCAG contrast: one always reaches 4.5:1. */
 export function connectionInk(color: string) {
   const luminance = relativeLuminance(color);
-  return (luminance + 0.05) / (relativeLuminance(darkInk) + 0.05) >
-    1.05 / (luminance + 0.05)
-    ? darkInk
-    : lightInk;
+  return (luminance + 0.05) / 0.05 > 1.05 / (luminance + 0.05)
+    ? "#000000"
+    : "#ffffff";
 }
 
 export function connectionColorStyle(color?: string | null): CSSProperties {

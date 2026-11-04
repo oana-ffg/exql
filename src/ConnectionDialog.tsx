@@ -1,4 +1,4 @@
-import { useEffect, useState, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { ArrowRight, Database, Folder, Plus, ShieldCheck } from "lucide-react";
 import { ContextMenu, useContextMenu } from "./ContextMenu";
 import { Modal } from "./Modal";
@@ -40,6 +40,7 @@ export function ConnectionDialog({
     null,
   );
   const context = useContextMenu<ConnectionProfile>();
+  const orderWrites = useRef(Promise.resolve());
   const [name, setName] = useState("");
   const [folder, setFolder] = useState("");
   const [color, setColor] = useState<string | null>(null);
@@ -120,17 +121,22 @@ export function ConnectionDialog({
     }
   }
   function moveProfile(profileId: string, targetId: string, side: DropSide) {
-    const previous = profiles;
     const next = moveById(profiles, profileId, targetId, side);
+    const ids = next.map((item) => item.id);
     setProfiles(next);
     setError("");
-    request("/profiles/order", { ids: next.map((item) => item.id) }).catch(
-      (error: Error) => {
-        // Going back keeps the list showing what is actually saved.
-        setProfiles(previous);
+    // One at a time, because a held Shift+arrow must not save out of order.
+    orderWrites.current = orderWrites.current
+      .then(() => request<void>("/profiles/order", { ids }))
+      .catch(async (error: Error) => {
         setError(`Could not save the new order: ${error.message}`);
-      },
-    );
+        setProfiles(await request<ConnectionProfile[]>("/profiles"));
+      })
+      .catch((error: Error) => {
+        setError(
+          `Could not save the new order, and could not reload the list: ${error.message}`,
+        );
+      });
   }
   const profileDrag = useDragReorder({
     axis: "y",

@@ -41,7 +41,7 @@ type GridMenu =
   | { kind: "keys"; position: Position };
 const noKeys: ForeignKey[] = [];
 const keyLabel = (key: ForeignKey) =>
-  `Go to ${key.referencedSchema}.${key.referencedTable} (${key.columns.map((column) => column.column).join(", ")})`;
+  `Go to ${key.referencedSchema}.${key.referencedTable} (${key.columns.map((column) => `${column.referencedColumn} = ${column.column}`).join(", ")})`;
 export const DataGrid = memo(function DataGrid({
   data,
   table,
@@ -172,7 +172,9 @@ export const DataGrid = memo(function DataGrid({
       event.target instanceof HTMLInputElement ||
       event.target instanceof HTMLTextAreaElement ||
       event.target instanceof HTMLSelectElement ||
-      event.target instanceof HTMLButtonElement
+      // Closing the key chooser returns focus to its arrow, which is part of the cell.
+      (event.target instanceof HTMLButtonElement &&
+        !event.target.classList.contains("key-link"))
     )
       return;
     if (!data.rows.length) return;
@@ -571,6 +573,9 @@ export const DataGrid = memo(function DataGrid({
                             .join("\n")}
                           onClick={(event) => {
                             event.stopPropagation();
+                            setActive({ row, col });
+                            setAnchor({ row, col });
+                            setSelected(new Set());
                             if (keys.length === 1)
                               onFollowKey(keys[0].key, keys[0].values);
                             else

@@ -85,14 +85,12 @@ public sealed class ConnectionProfiles(AppPaths paths)
             return profile;
         }
     }
-    public List<ConnectionProfile> Reorder(List<string> ids)
+    public void Reorder(List<string> ids)
     {
         lock (gate)
         {
             // Profiles the caller did not know about stay, after the ones it ordered.
-            var profiles = Load().OrderBy(profile => ids.IndexOf(profile.Id) is var index and >= 0 ? index : int.MaxValue).ToList();
-            Write(profiles);
-            return profiles;
+            Write(Load().OrderBy(profile => ids.IndexOf(profile.Id) is var index and >= 0 ? index : int.MaxValue).ToList());
         }
     }
     public ConnectionRequest Resolve(string id)

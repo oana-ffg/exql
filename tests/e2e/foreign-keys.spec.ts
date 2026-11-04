@@ -83,11 +83,17 @@ test("composite keys filter on every column, and a column in two keys offers bot
   await arrow(await gridCell(page, 0, "Country")).click();
   const menu = page.getByRole("menu", { name: "Referenced tables" });
   await expect(menu.getByRole("menuitem")).toHaveText([
-    "Go to dbo.Regions (Country, RegionCode)",
-    "Go to ref.Countries (Country)",
+    "Go to dbo.Regions (Country = Country, Code = RegionCode)",
+    "Go to ref.Countries (Code = Country)",
   ]);
+  // Cancelling leaves the grid's keyboard navigation working.
+  await page.keyboard.press("Escape");
+  await expect(menu).toHaveCount(0);
+  await page.keyboard.press("ArrowRight");
+  await expect(await gridCell(page, 0, "RegionCode")).toBeFocused();
+  await arrow(await gridCell(page, 0, "Country")).click();
   await menu
-    .getByRole("menuitem", { name: "Go to ref.Countries (Country)" })
+    .getByRole("menuitem", { name: "Go to ref.Countries (Code = Country)" })
     .click();
   await expect(
     page.getByRole("heading", { name: "Countries", exact: true }),
@@ -103,7 +109,7 @@ test("composite keys filter on every column, and a column in two keys offers bot
   // The right-click menu offers the same, so the keyboard can get there too.
   await (await gridCell(page, 0, "WorkItemId")).click({ button: "right" });
   await page
-    .getByRole("menuitem", { name: "Go to dbo.WorkItems (WorkItemId)" })
+    .getByRole("menuitem", { name: "Go to dbo.WorkItems (Id = WorkItemId)" })
     .click();
   await expect(
     page.getByRole("heading", { name: "WorkItems", exact: true }),
