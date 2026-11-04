@@ -109,7 +109,7 @@ Live Azure SQL and interactive Entra sign-in need an Azure account and database,
 
 ## Screenshots and social preview
 
-`npm run screenshots` regenerates `docs/screenshots/` and `docs/social-preview.png` from the real UI, using `tests/screenshots/`. It needs a local SQL Server, and creates and drops a database named `Bookshop`, filled with fictional data. If a database with that name already exists, the run fails without touching it.
+`npm run screenshots` regenerates `docs/screenshots/` and `docs/social-preview.png` from the real UI, using `tests/screenshots/`. It needs a local SQL Server, and creates and drops a database named `Bookshop`, filled with fictional data. If a database with that name already exists, the run fails without touching it. The card's mascot, `tests/screenshots/social-mascot.png`, was created with built-in imagegen from `public/exql.png`.
 
 Upload `docs/social-preview.png` under the repository's **Settings > General > Social preview** after changing it, because GitHub has no API for this.
 
