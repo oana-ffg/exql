@@ -104,6 +104,7 @@ it("does not render an unchanged grid when unrelated parent state changes", asyn
     descending: false,
     onSort: noop,
     onFilter: noop,
+    onFollowKey: () => {},
     onNotice: noop,
     disabled: false,
   };

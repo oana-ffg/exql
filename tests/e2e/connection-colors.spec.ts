@@ -9,7 +9,7 @@ test("connection colors persist and update open workspaces without reconnecting"
   const headers = { "X-Exql-Client": "1" };
   const name = `Color verification ${Date.now()}`;
   const ids: string[] = [];
-  const sessions: string[] = [];
+  let connects = 0;
   const documents: Record<string, unknown> = {
     scratch: "",
     library: { folders: [], queries: [] },
@@ -21,12 +21,14 @@ test("connection colors persist and update open workspaces without reconnecting"
     documents[key] = route.request().postDataJSON();
     return route.fulfill({ status: 204 });
   });
-  page.on("response", async (response) => {
+  // Counts without reading bodies: the last connect can still be in flight when
+  // the test ends. The page fixture closes the sessions these open.
+  page.on("response", (response) => {
     if (
       /\/api\/profiles\/[^/]+\/connect$/.test(response.url()) &&
       response.ok()
     )
-      sessions.push((await response.json()).id);
+      connects++;
   });
   const colorOf = (selector: string) =>
     page
@@ -104,7 +106,7 @@ test("connection colors persist and update open workspaces without reconnecting"
     await expect(page.getByRole("tabpanel").locator(".cm-content")).toHaveText(
       "SELECT 7;",
     );
-    expect(sessions).toHaveLength(2);
+    expect(connects).toBe(2);
     const saved = await request.get("/api/profiles", { headers });
     expect(
       (await saved.json()).find(
@@ -130,8 +132,6 @@ test("connection colors persist and update open workspaces without reconnecting"
       .poll(() => colorOf(".app-shell:not([hidden]) .connection-card"))
       .toBe(darkRed);
   } finally {
-    for (const id of sessions)
-      await request.delete(`/api/sessions/${id}`, { headers });
     for (const id of ids)
       await request.delete(`/api/profiles/${id}`, { headers });
   }

@@ -60,6 +60,7 @@ public static class ExqlHost
         app.MapGet("/api/workspace/{key}", (string key, WorkspaceStore workspace) => new { value = workspace.Read(key) });
         app.MapPost("/api/workspace/{key}", (string key, System.Text.Json.JsonElement value, WorkspaceStore workspace) => { workspace.Write(key, value); return Results.NoContent(); });
         app.MapPost("/api/profiles", (SaveProfileRequest request, ConnectionProfiles profiles) => profiles.Save(request));
+        app.MapPost("/api/profiles/order", (ReorderProfilesRequest request, ConnectionProfiles profiles) => { profiles.Reorder(request.Ids); return Results.NoContent(); });
         app.MapDelete("/api/profiles/{id}", (string id, ConnectionProfiles profiles) => { profiles.Delete(id); return Results.NoContent(); });
         app.MapPost("/api/profiles/{id}/connect", async (string id, ConnectionProfiles profiles, Sessions sessions, HttpContext context, CancellationToken ct) =>
             await Connect(profiles.Resolve(id), sessions, context, ct, profiles.Get(id)));

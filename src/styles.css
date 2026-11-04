@@ -1297,8 +1297,8 @@ dialog form.connection-editor {
 .app-toolbar {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  background: #141b25;
-  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--connection-color, #8a98ac) 10%, #141b25);
+  border-bottom: 2px solid var(--connection-color, var(--line));
 }
 .connection-tabs {
   display: flex;
@@ -1323,12 +1323,19 @@ dialog form.connection-editor {
   align-items: center;
   border: 1px solid transparent;
   border-top: 3px solid var(--connection-color, #8a98ac);
-  background: color-mix(in srgb, var(--connection-color, #8a98ac) 6%, #141b25);
+  background: #141b25;
   border-radius: 5px;
 }
 .connection-tab.active {
-  background: color-mix(in srgb, var(--connection-color, #8a98ac) 18%, #141b25);
+  background: color-mix(in srgb, var(--connection-color, #8a98ac) 32%, #141b25);
   border-color: var(--connection-color, #4a625a);
+}
+.connection-tab.active,
+.connection-tab.active button {
+  color: #e6edf6;
+}
+.connection-tab.active [role="tab"] {
+  font-weight: 650;
 }
 .connection-tab [role="tab"] {
   flex: 1;
@@ -1442,4 +1449,43 @@ dialog form.connection-editor {
 }
 .script-file .tree-item > small {
   flex-shrink: 0;
+}
+
+.connection-tab {
+  cursor: grab;
+}
+.connection-tab[data-dragging],
+.profile-row[data-dragging] {
+  opacity: 0.45;
+}
+.connection-tab[data-drop="before"] {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.connection-tab[data-drop="after"] {
+  box-shadow: inset -3px 0 0 var(--accent);
+}
+.profile-row[data-drop="before"] {
+  box-shadow: 0 -3px 0 var(--accent);
+}
+.profile-row[data-drop="after"] {
+  box-shadow: 0 3px 0 var(--accent);
+}
+
+.grid-scroll td.key-cell {
+  padding-right: 28px;
+}
+.key-link {
+  position: absolute;
+  top: 50%;
+  right: 5px;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  transform: translateY(-50%);
+  border-color: transparent;
+  background: transparent;
+  color: #7f93ad;
+}
+.key-link:hover:not(:disabled) {
+  color: var(--accent);
 }

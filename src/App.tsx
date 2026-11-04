@@ -21,6 +21,7 @@ import {
   connectionColorStyle,
   nextConnectionColor,
 } from "./connectionColors";
+import { moveById, useDragReorder, type DropSide } from "./reorder";
 
 interface Draft {
   id: string;
@@ -272,6 +273,10 @@ export default function App() {
       ),
     );
   }
+  function moveTab(id: string, targetId: string, side: DropSide) {
+    setScratch((current) => moveById(draftsFrom(current), id, targetId, side));
+  }
+  const tabDrag = useDragReorder({ axis: "x", onMove: moveTab });
   const keptSql = useRef(new Map<string, string>());
   async function closeWorkspace(draft: Draft) {
     if (activity[draft.id]?.busy || reconnects[draft.id]?.pending || closing)
@@ -343,7 +348,7 @@ export default function App() {
     );
 
   return (
-    <div className="application">
+    <div className="application" style={connectionColorStyle(active.color)}>
       <header className="app-toolbar">
         <nav className="connection-tabs" aria-label="Database workspaces">
           <div ref={tabList} role="tablist" aria-label="Database connections">
@@ -352,6 +357,7 @@ export default function App() {
                 className={`connection-tab ${active.id === draft.id ? "active" : ""}`}
                 style={connectionColorStyle(draft.color)}
                 key={draft.id}
+                {...tabDrag.bind(draft.id)}
               >
                 <button
                   role="tab"
@@ -370,6 +376,25 @@ export default function App() {
                       return;
                     event.preventDefault();
                     const index = drafts.indexOf(draft);
+                    if (event.shiftKey) {
+                      const toStart =
+                        event.key === "ArrowLeft" || event.key === "Home";
+                      const target =
+                        drafts[
+                          event.key === "Home"
+                            ? 0
+                            : event.key === "End"
+                              ? drafts.length - 1
+                              : index + (toStart ? -1 : 1)
+                        ];
+                      if (target)
+                        moveTab(
+                          draft.id,
+                          target.id,
+                          toStart ? "before" : "after",
+                        );
+                      return;
+                    }
                     const next =
                       drafts[
                         event.key === "Home"
@@ -451,43 +476,47 @@ export default function App() {
           </button>
         </div>
       )}
-      {drafts.map((draft) => (
-        <Workspace
-          key={draft.id}
-          id={draft.id}
-          active={active.id === draft.id}
-          closing={closing === draft.id}
-          session={sessions[draft.id] ?? null}
-          onSession={(session) => {
-            setSessions((current) => ({ ...current, [draft.id]: session }));
-            if (!session)
+      {/* A stable order, because moving a panel in the DOM would reset its scroll
+          positions. Only one panel shows, so this order is never visible. */}
+      {[...drafts]
+        .sort((a, b) => a.id.localeCompare(b.id))
+        .map((draft) => (
+          <Workspace
+            key={draft.id}
+            id={draft.id}
+            active={active.id === draft.id}
+            closing={closing === draft.id}
+            session={sessions[draft.id] ?? null}
+            onSession={(session) => {
+              setSessions((current) => ({ ...current, [draft.id]: session }));
+              if (!session)
+                setScratch((current) =>
+                  draftsFrom(current).map((tab) =>
+                    tab.id === draft.id ? { ...tab, disconnected: true } : tab,
+                  ),
+                );
+            }}
+            sql={draft.sql}
+            setSql={(sql) =>
               setScratch((current) =>
                 draftsFrom(current).map((tab) =>
-                  tab.id === draft.id ? { ...tab, disconnected: true } : tab,
+                  tab.id === draft.id ? { ...tab, sql } : tab,
                 ),
-              );
-          }}
-          sql={draft.sql}
-          setSql={(sql) =>
-            setScratch((current) =>
-              draftsFrom(current).map((tab) =>
-                tab.id === draft.id ? { ...tab, sql } : tab,
-              ),
-            )
-          }
-          scriptFolders={scriptFolders}
-          library={library}
-          setLibrary={setLibrary}
-          savedConnection={draft.profileId ? draft.name : null}
-          reconnecting={!!reconnects[draft.id]?.pending}
-          reconnectError={reconnects[draft.id]?.error ?? ""}
-          onConnect={() => connectTab(draft)}
-          onChooseConnection={() => setConnectionDialog({ target: draft.id })}
-          onActivity={reportActivity}
-          onPaneResize={resizePane}
-          defaultTimeoutSeconds={settings.scriptTimeoutSeconds}
-        />
-      ))}
+              )
+            }
+            scriptFolders={scriptFolders}
+            library={library}
+            setLibrary={setLibrary}
+            savedConnection={draft.profileId ? draft.name : null}
+            reconnecting={!!reconnects[draft.id]?.pending}
+            reconnectError={reconnects[draft.id]?.error ?? ""}
+            onConnect={() => connectTab(draft)}
+            onChooseConnection={() => setConnectionDialog({ target: draft.id })}
+            onActivity={reportActivity}
+            onPaneResize={resizePane}
+            defaultTimeoutSeconds={settings.scriptTimeoutSeconds}
+          />
+        ))}
       {settingsOpen && (
         <SettingsDialog
           scriptTimeoutSeconds={settings.scriptTimeoutSeconds}

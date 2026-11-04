@@ -45,6 +45,31 @@ public sealed class CredentialTests
     }
 
     [Fact]
+    public void EditsKeepTheirPlaceAndReorderingPersists()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        var root = Path.Combine(Path.GetTempPath(), "exql-order-" + Guid.NewGuid().ToString("N"));
+        var store = new ConnectionProfiles(new AppPaths(root));
+        try
+        {
+            var connection = new ConnectionRequest("localhost", "ExqlDemo", "windows", null, null);
+            var saved = new[] { "A", "B", "C" }.Select(name => store.Save(new(null, name, "", connection))).ToList();
+            string Names(IEnumerable<ConnectionProfile> profiles) => string.Concat(profiles.Select(profile => profile.Name));
+            store.Save(new(saved[0].Id, "A2", "", connection));
+            Assert.Equal("A2BC", Names(store.List()));
+            store.Reorder([saved[2].Id, saved[0].Id, saved[1].Id]);
+            Assert.Equal("CA2B", Names(new ConnectionProfiles(new AppPaths(root)).List()));
+            // A list that went stale loses nothing and ignores what no longer exists.
+            store.Reorder([saved[1].Id, "missing"]);
+            Assert.Equal("BCA2", Names(store.List()));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void WindowsVaultRoundTripAndDeletion()
     {
         if (!OperatingSystem.IsWindows()) return;

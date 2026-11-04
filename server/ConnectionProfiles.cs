@@ -4,6 +4,7 @@ using Microsoft.Data.SqlClient;
 namespace Exql;
 
 public sealed record ConnectionProfile(string Id, string Name, string Folder, ConnectionRequest Connection, string? Color = null);
+public sealed record ReorderProfilesRequest(List<string> Ids);
 public sealed record SaveProfileRequest(string? Id, string Name, string Folder, ConnectionRequest Connection, bool KeepPassword = false, string? Color = null, string? CredentialSourceId = null);
 
 public sealed class ConnectionProfiles(AppPaths paths)
@@ -76,10 +77,20 @@ public sealed class ConnectionProfiles(AppPaths paths)
                 else if (existing?.Connection.Authentication is "sql" or "connectionString") WindowsCredentials.Delete(id);
             }
             var profile = new ConnectionProfile(id, request.Name.Trim(), request.Folder.Trim(), connection with { Password = null, ConnectionString = null }, color);
-            profiles.RemoveAll(p => p.Id == id);
-            profiles.Add(profile);
+            // An edit keeps the profile's place in the order the user chose.
+            var index = profiles.FindIndex(p => p.Id == id);
+            if (index >= 0) profiles[index] = profile;
+            else profiles.Add(profile);
             Write(profiles);
             return profile;
+        }
+    }
+    public void Reorder(List<string> ids)
+    {
+        lock (gate)
+        {
+            // Profiles the caller did not know about stay, after the ones it ordered.
+            Write(Load().OrderBy(profile => ids.IndexOf(profile.Id) is var index and >= 0 ? index : int.MaxValue).ToList());
         }
     }
     public ConnectionRequest Resolve(string id)

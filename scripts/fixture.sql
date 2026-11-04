@@ -65,7 +65,39 @@ BEGIN
 END;
 IF OBJECT_ID(N'dbo.CommandLog', N'U') IS NULL
     CREATE TABLE dbo.CommandLog (Id int NOT NULL PRIMARY KEY, Message nvarchar(100) NULL);
-
+IF SCHEMA_ID(N'ref') IS NULL
+    EXEC(N'CREATE SCHEMA ref');
+GO
+IF OBJECT_ID(N'ref.Countries', N'U') IS NULL
+BEGIN
+    CREATE TABLE ref.Countries (Code char(2) NOT NULL CONSTRAINT PK_Countries PRIMARY KEY, Name nvarchar(50) NOT NULL);
+    INSERT ref.Countries(Code, Name) VALUES ('DK', N'Denmark'), ('SE', N'Sweden');
+END;
+IF OBJECT_ID(N'dbo.Regions', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.Regions (
+        Country char(2) NOT NULL,
+        Code int NOT NULL,
+        Name nvarchar(50) NOT NULL,
+        CONSTRAINT PK_Regions PRIMARY KEY (Country, Code)
+    );
+    INSERT dbo.Regions(Country, Code, Name) VALUES ('DK', 1, N'Zealand'), ('DK', 2, N'Jutland'), ('SE', 1, N'Scania');
+END;
+IF OBJECT_ID(N'dbo.Assignments', N'U') IS NULL
+BEGIN
+    -- Country is in two keys, one of them composite, and the columns are nullable.
+    CREATE TABLE dbo.Assignments (
+        Id int NOT NULL CONSTRAINT PK_Assignments PRIMARY KEY,
+        WorkItemId int NULL CONSTRAINT FK_Assignments_WorkItems REFERENCES dbo.WorkItems(Id),
+        Country char(2) NULL CONSTRAINT FK_Assignments_Countries REFERENCES ref.Countries(Code),
+        RegionCode int NULL,
+        CONSTRAINT FK_Assignments_Regions FOREIGN KEY (Country, RegionCode) REFERENCES dbo.Regions(Country, Code)
+    );
+    INSERT dbo.Assignments(Id, WorkItemId, Country, RegionCode) VALUES
+      (1, 2, 'DK', 2),
+      (2, NULL, 'SE', NULL),
+      (3, 3, NULL, NULL);
+END;
 GO
 IF OBJECT_ID(N'dbo.OpenWorkItems', N'V') IS NULL
     EXEC(N'CREATE VIEW dbo.OpenWorkItems AS SELECT Id,Title,Status,Priority FROM dbo.WorkItems WHERE Status=N''Open''');
