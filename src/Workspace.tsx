@@ -755,15 +755,6 @@ export function Workspace({
                     disabled={!!busy}
                   />
                 </label>
-                {session && (
-                  <span
-                    className="run-target"
-                    title={`Runs on ${session.database} · ${session.server}`}
-                  >
-                    <span className="run-target-swatch" />
-                    {session.name}
-                  </span>
-                )}
                 <button
                   className="primary"
                   disabled={!session || !!busy || !(selection || sql).trim()}

@@ -1297,8 +1297,8 @@ dialog form.connection-editor {
 .app-toolbar {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  background: #141b25;
-  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--connection-color, #8a98ac) 10%, #141b25);
+  border-bottom: 2px solid var(--connection-color, var(--line));
 }
 .connection-tabs {
   display: flex;
@@ -1323,12 +1323,19 @@ dialog form.connection-editor {
   align-items: center;
   border: 1px solid transparent;
   border-top: 3px solid var(--connection-color, #8a98ac);
-  background: color-mix(in srgb, var(--connection-color, #8a98ac) 6%, #141b25);
+  background: #141b25;
   border-radius: 5px;
 }
 .connection-tab.active {
-  background: color-mix(in srgb, var(--connection-color, #8a98ac) 18%, #141b25);
+  background: color-mix(in srgb, var(--connection-color, #8a98ac) 32%, #141b25);
   border-color: var(--connection-color, #4a625a);
+}
+.connection-tab.active,
+.connection-tab.active button {
+  color: #e6edf6;
+}
+.connection-tab.active [role="tab"] {
+  font-weight: 650;
 }
 .connection-tab [role="tab"] {
   flex: 1;
@@ -1481,57 +1488,4 @@ dialog form.connection-editor {
 }
 .key-link:hover:not(:disabled) {
   color: var(--accent);
-}
-
-/* Which database a click affects has to be obvious at a glance. */
-.app-toolbar {
-  background: color-mix(in srgb, var(--connection-color, #8a98ac) 28%, #141b25);
-  border-bottom: 3px solid var(--connection-color, var(--line));
-}
-.connection-tab:not(.active) {
-  background: #141b25;
-}
-.connection-tab.active {
-  background: var(--connection-color, #4a625a);
-  border-color: var(--connection-color, #4a625a);
-}
-.connection-tab.active,
-.connection-tab.active button {
-  color: var(--connection-ink, inherit);
-}
-.connection-tab.active [role="tab"] {
-  font-weight: 650;
-}
-.connection-tab.active [role="tab"] > svg {
-  color: inherit;
-}
-.connection-tab.active .connection-dot {
-  background: var(--connection-ink, #677184);
-  box-shadow: none;
-}
-.connection-tab.active .icon-button:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--connection-ink, #fff) 18%, transparent);
-  border-color: transparent;
-}
-.run-target {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  max-width: 220px;
-  padding: 5px 9px;
-  overflow: hidden;
-  border: 1px solid var(--connection-color, var(--line));
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--connection-color, #8a98ac) 14%, #141b25);
-  font-size: 11px;
-  font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.run-target-swatch {
-  flex-shrink: 0;
-  width: 8px;
-  height: 8px;
-  border-radius: 2px;
-  background: var(--connection-color, currentColor);
 }

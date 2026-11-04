@@ -196,21 +196,12 @@ test("the top bar and active tab take the open connection's color", async ({
         property,
       );
   const toolbar = () => css(".app-toolbar", "border-bottom-color");
-  const activeTab = () => css(".connection-tab.active", "background-color");
-  const activeText = () => css(".connection-tab.active [role=tab]", "color");
+  const activeBorder = () => css(".connection-tab.active", "border-left-color");
 
   await expect.poll(toolbar).toBe("rgb(189, 69, 69)");
-  expect(await activeTab()).toBe("rgb(189, 69, 69)");
-  expect(await activeText()).toBe("rgb(255, 255, 255)");
+  expect(await activeBorder()).toBe("rgb(189, 69, 69)");
 
   await page.getByRole("tab", { name: "Light", exact: true }).click();
   await expect.poll(toolbar).toBe("rgb(142, 214, 174)");
-  expect(await activeTab()).toBe("rgb(142, 214, 174)");
-  expect(await activeText()).toBe("rgb(0, 0, 0)");
-
-  const panel = page.getByRole("tabpanel");
-  await panel
-    .getByRole("button", { name: "New query SQL", exact: true })
-    .click();
-  await expect(panel.locator(".run-target")).toHaveText("Light");
+  expect(await activeBorder()).toBe("rgb(142, 214, 174)");
 });
