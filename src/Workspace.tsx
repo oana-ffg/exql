@@ -11,7 +11,6 @@ import {
   ArrowLeft,
   ArrowRight,
   Check,
-  Copy,
   Code2,
   Database,
   Download,
@@ -27,7 +26,9 @@ import {
 import { request, download, exportText } from "./api";
 import { DataGrid } from "./DataGrid";
 import { FilterBar } from "./FilterBar";
-import { Modal } from "./Modal";
+import { ExportDialog } from "./ExportDialog";
+import { QueryResults } from "./QueryResults";
+import { SaveQueryDialog } from "./SaveQueryDialog";
 import {
   readScript,
   scriptFullPath,
@@ -39,7 +40,6 @@ import { Sidebar } from "./Sidebar";
 import { Splitter } from "./Splitter";
 import { TimeoutSelect } from "./TimeoutSelect";
 import type { Pane } from "./paneLayout";
-import { folderPath } from "./queryLibrary";
 import { copyText } from "./clipboard";
 import { formatElapsed, resultsText } from "./format";
 import type {
@@ -792,68 +792,22 @@ export function Workspace({
                 />
               )}
               {queryResponse && (
-                <div className={data ? "results-pane split" : "results-pane"}>
-                  {(queryResponse.results.length > 0 ||
-                    queryResponse.recordsAffected >= 0) && (
-                    <div className="results-heading">
-                      <strong>RESULTS</strong>
-                      {queryResponse.results.map((result, i) => (
-                        <button
-                          className={
-                            i === resultIndex
-                              ? "result-tab active"
-                              : "result-tab"
-                          }
-                          disabled={!!busy}
-                          key={result.id}
-                          onClick={() => {
-                            setResultIndex(i);
-                            setQueryData(result.page);
-                            setQueryOffset(0);
-                            setGeneration((value) => value + 1);
-                          }}
-                        >
-                          Result {i + 1}
-                          <span>{result.rowCount.toLocaleString()}</span>
-                        </button>
-                      ))}
-                      {queryResponse.recordsAffected >= 0 && (
-                        <span className="hint">
-                          {queryResponse.recordsAffected} rows affected
-                        </span>
-                      )}
-                      <div className="spacer" />
-                      {queryResponse.results.length ? (
-                        <button
-                          disabled={!!busy}
-                          title="Copy every result set, with messages, as text"
-                          onClick={() => void copyAllResults(queryResponse)}
-                        >
-                          <Copy size={14} />
-                          Copy all as text
-                        </button>
-                      ) : null}
-                      {data && (
-                        <button
-                          disabled={!!busy}
-                          onClick={() => setExportOpen(true)}
-                        >
-                          <Download size={14} />
-                          Export result
-                        </button>
-                      )}
-                    </div>
-                  )}
-                  {queryResponse.messages.length ? (
-                    <details className="query-messages">
-                      <summary>
-                        Messages ({queryResponse.messages.length})
-                      </summary>
-                      <pre>{queryResponse.messages.join("\n")}</pre>
-                    </details>
-                  ) : null}
+                <QueryResults
+                  response={queryResponse}
+                  resultIndex={resultIndex}
+                  hasData={!!data}
+                  busy={!!busy}
+                  onSelectResult={(index) => {
+                    setResultIndex(index);
+                    setQueryData(queryResponse.results[index].page);
+                    setQueryOffset(0);
+                    setGeneration((value) => value + 1);
+                  }}
+                  onCopyAll={() => void copyAllResults(queryResponse)}
+                  onExport={() => setExportOpen(true)}
+                >
                   {grid}
-                </div>
+                </QueryResults>
               )}
             </div>
             {!session && connectionPrompt}
@@ -1056,128 +1010,5 @@ export function Workspace({
         />
       )}
     </div>
-  );
-}
-
-function SaveQueryDialog({
-  library,
-  existing,
-  onClose,
-  onSave,
-}: {
-  library: Library;
-  existing?: SavedQuery;
-  onClose: () => void;
-  onSave: (name: string, folder: string) => void;
-}) {
-  const [name, setName] = useState(existing?.name ?? "");
-  const [folder, setFolder] = useState(existing?.folderId ?? "");
-  return (
-    <Modal title="Save query" onClose={onClose}>
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (name.trim()) onSave(name.trim(), folder);
-        }}
-      >
-        <label>
-          Query name
-          <input
-            autoFocus
-            required
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
-        </label>
-        <label>
-          Folder
-          <select
-            aria-label="Folder"
-            value={folder}
-            onChange={(e) => setFolder(e.target.value)}
-          >
-            <option value="">Unfiled</option>
-            {library.folders.map((folder) => (
-              <option value={folder.id} key={folder.id}>
-                {folderPath(library, folder.id)}
-              </option>
-            ))}
-          </select>
-        </label>
-        <footer className="modal-footer">
-          <button type="button" onClick={onClose}>
-            Cancel
-          </button>
-          <button className="primary">Save query</button>
-        </footer>
-      </form>
-    </Modal>
-  );
-}
-function ExportDialog({
-  wholeTable,
-  onClose,
-  onExport,
-}: {
-  wholeTable: boolean;
-  onClose: () => void;
-  onExport: (format: string, filtered: boolean) => void;
-}) {
-  const [format, setFormat] = useState("csv");
-  const [filtered, setFiltered] = useState(false);
-  return (
-    <Modal
-      title={wholeTable ? "Export table" : "Export query result"}
-      onClose={onClose}
-    >
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          onExport(format, filtered);
-        }}
-      >
-        <label>
-          Format
-          <select
-            aria-label="Format"
-            value={format}
-            onChange={(e) => setFormat(e.target.value)}
-          >
-            <option value="csv">CSV</option>
-            <option value="json">JSON</option>
-          </select>
-        </label>
-        {wholeTable && (
-          <label>
-            Rows
-            <select
-              value={filtered ? "filtered" : "all"}
-              onChange={(e) => setFiltered(e.target.value === "filtered")}
-            >
-              <option value="all">Whole table — all rows</option>
-              <option value="filtered">
-                All rows matching applied filters
-              </option>
-            </select>
-          </label>
-        )}
-        <p className="hint">
-          {wholeTable
-            ? "Exports every matching row, across all pages. Unsaved cell edits are excluded."
-            : "Exports every row in the selected result set from the last successful execution."}{" "}
-          CSV preserves raw values; NULL is an unquoted empty field. Use JSON to
-          preserve types and nulls.
-        </p>
-        <footer className="modal-footer">
-          <button type="button" onClick={onClose}>
-            Cancel
-          </button>
-          <button className="primary">
-            <Download size={14} />
-            Download
-          </button>
-        </footer>
-      </form>
-    </Modal>
   );
 }
