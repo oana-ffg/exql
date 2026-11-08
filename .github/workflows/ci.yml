@@ -25,6 +25,8 @@ jobs:
         with:
           dotnet-version: 10.0.x
       - run: npm ci
+      - name: Test SQL bootstrap download validation and retries
+        run: ./scripts/ci/test-download-sql-bootstrap.ps1
       - run: npm run format:check
       - run: npm run check
       - uses: actions/upload-artifact@v7
@@ -101,7 +103,7 @@ jobs:
             test-results/
             playwright-report/
             artifacts/
-            C:/Program Files/Microsoft SQL Server/160/Setup Bootstrap/Log/**/Summary*.txt
+            C:/Program Files/Microsoft SQL Server/*/Setup Bootstrap/Log/**/Summary*.txt
   desktop:
     runs-on: windows-latest
     timeout-minutes: 40
@@ -133,4 +135,4 @@ jobs:
             !artifacts/**/feed/**
             !artifacts/**/live-feed/**
             !artifacts/**/WebView2/**
-            C:/Program Files/Microsoft SQL Server/160/Setup Bootstrap/Log/**/Summary*.txt
+            C:/Program Files/Microsoft SQL Server/*/Setup Bootstrap/Log/**/Summary*.txt
