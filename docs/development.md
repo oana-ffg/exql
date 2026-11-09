@@ -65,6 +65,8 @@ GitHub Actions runs on pull requests and pushes to main:
 - **Windows SQL Server Express:** the complete Edge UI suite, Windows authentication, SQL login and saved connection strings.
 - **Portable desktop:** package, extract and launch the real app, commit a grid edit, run SQL, save a query, restart, reconnect and verify a native download. A separate real portable update verifies integrity rejection, retry, restart guards and persistence through replacement.
 
+The Windows jobs download the Microsoft-maintained Express bootstrap alias (currently SQL Server 2025). Downloads have a two-minute timeout and up to three attempts. Before execution, the bootstrap must be at least 1 MB and carry a valid Microsoft Authenticode signature. Each attempt logs the resolved URL, content type and size; successful validation also logs the product version and SHA-256. The Windows checks job tests rejected payloads, retries and retry exhaustion without installing SQL.
+
 Failed jobs upload traces, screenshots, host logs and diagnostics. Playwright retries are disabled.
 
 ### Running locally

@@ -3,8 +3,9 @@ if ($env:GITHUB_ACTIONS -ne 'true') { throw 'This installer is only for disposab
 if (Get-Service MSSQLSERVER -ErrorAction SilentlyContinue) { throw 'Refusing to replace an existing SQL instance.' }
 $directory = Join-Path $env:RUNNER_TEMP 'exql-sql-setup'
 New-Item -ItemType Directory -Path $directory | Out-Null
-$bootstrap = Join-Path $directory 'SQL2022-Express.exe'
-Invoke-WebRequest 'https://go.microsoft.com/fwlink/p/?linkid=2216019&clcid=0x409&culture=en-us&country=us' -OutFile $bootstrap
+. (Join-Path $PSScriptRoot 'download-sql-bootstrap.ps1')
+$bootstrap = Join-Path $directory 'SQL-Express.exe'
+Get-SqlBootstrap -Destination $bootstrap
 $download = Start-Process -FilePath $bootstrap -ArgumentList "/Action=Download /MediaType=Core /Quiet /MediaPath=$directory" -WindowStyle Hidden -Wait -PassThru
 if ($download.ExitCode -ne 0) { throw "SQL media download failed: $($download.ExitCode)" }
 $media = @(Get-ChildItem -LiteralPath $directory -Filter 'SQLEXPR*x64*.exe')
