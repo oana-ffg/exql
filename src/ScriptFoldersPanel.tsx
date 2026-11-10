@@ -1,4 +1,12 @@
-import { FileCode2, Folder, FolderPlus, Play, RefreshCw } from "lucide-react";
+import {
+  ArrowDownAZ,
+  ClockArrowDown,
+  FileCode2,
+  Folder,
+  FolderPlus,
+  Play,
+  RefreshCw,
+} from "lucide-react";
 import { ContextMenu, useContextMenu } from "./ContextMenu";
 import { copyText } from "./clipboard";
 import { canPickFolder } from "./desktopBridge";
@@ -9,13 +17,15 @@ import {
   type ScriptFoldersState,
   type OpenScript,
 } from "./scriptFolders";
+import { scriptTree, type ScriptTree } from "./scriptTree";
 
 type Target = { folder: ScriptFolder; file?: ScriptFile };
 
-function age(modified: string) {
+function age(time: string | null) {
+  if (time === null) return "?";
   const minutes = Math.max(
     0,
-    Math.floor((Date.now() - Date.parse(modified)) / 60000),
+    Math.floor((Date.now() - Date.parse(time)) / 60000),
   );
   return minutes < 1
     ? "now"
@@ -51,59 +61,47 @@ export function ScriptFoldersPanel({
       run,
     );
   }
-  function tree(folder: ScriptFolder, files: ScriptFile[], prefix = "") {
-    const children = files.filter((file) => file.path.startsWith(prefix));
-    const directories = [
-      ...new Set(
-        children
-          .map((file) => file.path.slice(prefix.length))
-          .filter((path) => path.includes("/"))
-          .map((path) => path.split("/")[0]),
-      ),
-    ];
+  const byCreated = state.sort === "created";
+  function tree(folder: ScriptFolder, { directories, files }: ScriptTree) {
     return (
       <>
-        {directories.map((name) => (
+        {directories.map(({ name, tree: children }) => (
           <details key={name} className="tree-folder nested-folders" open>
             <summary>
               <Folder size={15} />
               <span>{name}</span>
             </summary>
-            {tree(folder, children, `${prefix}${name}/`)}
+            {tree(folder, children)}
           </details>
         ))}
-        {children
-          .filter((file) => !file.path.slice(prefix.length).includes("/"))
-          .map((file) => {
-            const name = file.path.slice(prefix.length);
-            return (
-              <div
-                className="saved-query script-file"
-                key={file.path}
-                {...context.bind({ folder, file })}
-              >
-                <button
-                  className="tree-item"
-                  disabled={disabled}
-                  onClick={() => open(folder, file)}
-                  title={`${file.path}\n${new Date(file.modified).toLocaleString()}`}
-                >
-                  <FileCode2 size={14} />
-                  <span>{name}</span>
-                  <small>{age(file.modified)}</small>
-                </button>
-                <button
-                  className="icon-button"
-                  aria-label={`Run ${name}`}
-                  title={`Run ${name}`}
-                  disabled={!canRun}
-                  onClick={() => open(folder, file, true)}
-                >
-                  <Play size={13} />
-                </button>
-              </div>
-            );
-          })}
+        {files.map(({ name, file }) => (
+          <div
+            className="saved-query script-file"
+            key={file.path}
+            {...context.bind({ folder, file })}
+          >
+            <button
+              className="tree-item"
+              disabled={disabled}
+              onClick={() => open(folder, file)}
+              title={`${file.path}\nCreated ${file.created === null ? "unknown" : new Date(file.created).toLocaleString()}\nModified ${new Date(file.modified).toLocaleString()}`}
+            >
+              <FileCode2 size={14} />
+              <span>{name}</span>
+              {/* The age follows the sort so newest-first order is visible. */}
+              <small>{age(byCreated ? file.created : file.modified)}</small>
+            </button>
+            <button
+              className="icon-button"
+              aria-label={`Run ${name}`}
+              title={`Run ${name}`}
+              disabled={!canRun}
+              onClick={() => open(folder, file, true)}
+            >
+              <Play size={13} />
+            </button>
+          </div>
+        ))}
       </>
     );
   }
@@ -113,6 +111,26 @@ export function ScriptFoldersPanel({
       <div className="section-heading saved-heading">
         SCRIPT FOLDERS
         <div className="folder-actions-always">
+          <button
+            className="icon-button"
+            aria-label={
+              byCreated
+                ? "Sort scripts by name"
+                : "Sort scripts by newest created"
+            }
+            title={
+              byCreated
+                ? "Sorted by newest created. Click to sort by name."
+                : "Sorted by name. Click to sort by newest created."
+            }
+            onClick={() => state.setSort(byCreated ? "name" : "created")}
+          >
+            {byCreated ? (
+              <ClockArrowDown size={14} />
+            ) : (
+              <ArrowDownAZ size={14} />
+            )}
+          </button>
           <button
             className="icon-button"
             aria-label="Add script folder"
@@ -155,7 +173,7 @@ export function ScriptFoldersPanel({
               </p>
             ) : (
               <>
-                {tree(folder, listing?.scripts ?? [])}
+                {tree(folder, scriptTree(listing?.scripts ?? [], state.sort))}
                 {!listing?.scripts.length && (
                   <p className="sidebar-hint">No .sql files in this folder.</p>
                 )}
