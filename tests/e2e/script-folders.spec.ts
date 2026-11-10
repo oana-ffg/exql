@@ -232,6 +232,73 @@ test("linked scripts read current disk content, protect edits, run and unlink wi
   }
 });
 
+test("scripts sort by name or newest created and remember the choice", async ({
+  page,
+  request,
+}) => {
+  const directory = resolve("artifacts", `script-folder-sort-${Date.now()}`);
+  await mkdir(directory, { recursive: true });
+  // Created first, so the newest-first order is the reverse of the name order.
+  await writeFile(resolve(directory, "a-old.sql"), "SELECT 1;");
+  await new Promise((done) => setTimeout(done, 50));
+  await writeFile(resolve(directory, "z-new.sql"), "SELECT 2;");
+  const documents: Record<string, unknown> = {
+    scratch: "",
+    library: { folders: [], queries: [] },
+  };
+  await page.route("**/api/workspace/*", (route) => {
+    const key = route.request().url().split("/").at(-1)!;
+    if (route.request().method() === "GET")
+      return route.fulfill({ json: { value: documents[key] ?? null } });
+    documents[key] = route.request().postDataJSON();
+    return route.fulfill({ status: 204 });
+  });
+  const added = await request.post("/api/script-folders", {
+    headers,
+    data: { path: directory },
+  });
+  expect(added.ok(), await added.text()).toBeTruthy();
+  const { id } = await added.json();
+  try {
+    const panel = page.getByRole("tabpanel");
+    const folder = panel.locator(".linked-folder").filter({
+      has: page.locator(`summary[title=${JSON.stringify(directory)}]`),
+    });
+    const names = folder.locator(".script-file .tree-item > span");
+    const showScripts = async () => {
+      await page.goto("/");
+      await panel
+        .getByRole("button", { name: "SQL scripts", exact: true })
+        .click();
+    };
+
+    await showScripts();
+    await expect(names).toHaveText(["a-old.sql", "z-new.sql"]);
+    await panel
+      .getByRole("button", {
+        name: "Sort scripts by newest created",
+        exact: true,
+      })
+      .click();
+    await expect(names).toHaveText(["z-new.sql", "a-old.sql"]);
+    await expect
+      .poll(() => (documents.settings as { scriptSort?: string })?.scriptSort)
+      .toBe("created");
+
+    await showScripts();
+    await expect(names).toHaveText(["z-new.sql", "a-old.sql"]);
+    await panel
+      .getByRole("button", { name: "Sort scripts by name", exact: true })
+      .click();
+    await expect(names).toHaveText(["a-old.sql", "z-new.sql"]);
+    await expect
+      .poll(() => (documents.settings as { scriptSort?: string })?.scriptSort)
+      .toBe("name");
+  } finally {
+    await request.delete(`/api/script-folders/${id}`, { headers });
+  }
+});
+
 test("script API rejects traversal and absolute paths", async ({ request }) => {
   const directory = resolve("artifacts", `script-folder-api-${Date.now()}`);
   await mkdir(directory, { recursive: true });

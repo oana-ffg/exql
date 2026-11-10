@@ -81,7 +81,11 @@ export default function App() {
   const [connecting, setConnecting] = useState(false);
   const [closing, setClosing] = useState<string | null>(null);
   const [error, setError] = useState("");
-  const scriptFolders = useScriptFolders(setError);
+  const scriptFolders = useScriptFolders(
+    setError,
+    settings.scriptSort,
+    (scriptSort) => setSettings((current) => ({ ...current, scriptSort })),
+  );
   const activeTab = useRef<HTMLButtonElement>(null);
   const tabList = useRef<HTMLDivElement>(null);
   const drafts = draftsFrom(scratch);

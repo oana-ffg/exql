@@ -55,9 +55,17 @@ public sealed class ScriptFoldersTests : IDisposable
         File.WriteAllText(hidden, "SELECT 3;");
         File.SetAttributes(hidden, FileAttributes.Hidden);
         var folder = store.Add(scripts);
+        var created = new DateTime(2024, 5, 6, 7, 8, 9, DateTimeKind.Utc);
+        File.SetCreationTimeUtc(Path.Combine(scripts, "top.SQL"), created);
         var listing = store.Scripts(folder.Id);
         Assert.Equal(["Nested/inner.sql", "top.SQL"], listing.Scripts.Select(file => file.Path));
-        Assert.All(listing.Scripts, file => { Assert.True(file.Size > 0); Assert.Equal(DateTimeKind.Utc, file.Modified.Kind); });
+        Assert.Equal(created, listing.Scripts[1].Created);
+        Assert.All(listing.Scripts, file =>
+        {
+            Assert.True(file.Size > 0);
+            Assert.Equal(DateTimeKind.Utc, file.Created?.Kind);
+            Assert.Equal(DateTimeKind.Utc, file.Modified.Kind);
+        });
         Assert.False(listing.Truncated);
         Assert.Empty(listing.Unreadable);
         Directory.Delete(Path.Combine(scripts, "Nested"), true);
@@ -68,6 +76,14 @@ public sealed class ScriptFoldersTests : IDisposable
         var error = Assert.Throws<InputException>(() => store.Scripts(folder.Id));
         Assert.Equal(404, error.Status);
         Assert.Contains(scripts, error.Message);
+    }
+
+    [Fact]
+    public void ReportsUnknownCreationTimesAsMissing()
+    {
+        Assert.Null(ScriptFolders.KnownTime(new FileInfo(Path.Combine(root, "missing.sql")).CreationTimeUtc));
+        var known = new DateTime(2024, 5, 6, 7, 8, 9, DateTimeKind.Utc);
+        Assert.Equal(known, ScriptFolders.KnownTime(known));
     }
 
     [Theory]

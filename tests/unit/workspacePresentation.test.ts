@@ -107,6 +107,8 @@ async function render(sql = "SELECT draft;", onLibrary = vi.fn()) {
         refresh: async () => {},
         addFromPicker: async () => {},
         remove: async () => {},
+        sort: "name",
+        setSort: () => {},
       },
       setLibrary: (change) => {
         onLibrary(change);

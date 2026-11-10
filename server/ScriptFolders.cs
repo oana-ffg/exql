@@ -8,7 +8,8 @@ public sealed record ScriptFolder(string Id, string Path)
     public string Name => System.IO.Path.GetFileName(Path) is { Length: > 0 } name ? name : Path;
 }
 public sealed record AddScriptFolderRequest(string Path);
-public sealed record ScriptFile(string Path, long Size, DateTime Modified);
+// Created is null where the file system keeps no creation time.
+public sealed record ScriptFile(string Path, long Size, DateTime? Created, DateTime Modified);
 public sealed record ScriptListing(List<ScriptFile> Scripts, bool Truncated, List<string> Unreadable);
 public sealed record ScriptContent(string Sql, DateTime Modified);
 
@@ -116,10 +117,13 @@ public sealed class ScriptFolders(AppPaths paths)
             return new ScriptListing(files.Take(MaxFiles).Select(file =>
             {
                 var info = new FileInfo(file);
-                return new ScriptFile(Relative(root, file), info.Length, info.LastWriteTimeUtc);
+                return new ScriptFile(Relative(root, file), info.Length, KnownTime(info.CreationTimeUtc), info.LastWriteTimeUtc);
             }).ToList(), files.Count > MaxFiles, unreadable);
         });
     }
+
+    // Windows reports a missing timestamp as file time zero (1601-01-01) rather than failing.
+    internal static DateTime? KnownTime(DateTime utc) => utc == DateTime.FromFileTimeUtc(0) ? null : utc;
 
     private static string Relative(string root, string path) => Path.GetRelativePath(root, path).Replace('\\', '/');
 

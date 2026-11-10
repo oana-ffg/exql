@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { request } from "./api";
 import { pickFolder } from "./desktopBridge";
+import type { ScriptSort } from "./scriptTree";
 
 export interface ScriptFile {
   path: string;
   size: number;
+  /** Null where the file system keeps no creation time. */
+  created: string | null;
   modified: string;
 }
 export interface ScriptFolder {
@@ -40,7 +43,12 @@ export async function readScript(script: OpenScript, signal?: AbortSignal) {
 
 export type ScriptFoldersState = ReturnType<typeof useScriptFolders>;
 
-export function useScriptFolders(onError: (message: string) => void) {
+// The sort order is an app setting; it travels with the folders so every panel shows it.
+export function useScriptFolders(
+  onError: (message: string) => void,
+  sort: ScriptSort,
+  setSort: (sort: ScriptSort) => void,
+) {
   const [folders, setFolders] = useState<ScriptFolder[]>([]);
   const [listings, setListings] = useState<Record<string, Listing>>({});
   const [adding, setAdding] = useState(false);
@@ -123,5 +131,14 @@ export function useScriptFolders(onError: (message: string) => void) {
       onError((error as Error).message);
     }
   }
-  return { folders, listings, refresh, adding, addFromPicker, remove };
+  return {
+    folders,
+    listings,
+    refresh,
+    adding,
+    addFromPicker,
+    remove,
+    sort,
+    setSort,
+  };
 }

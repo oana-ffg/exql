@@ -78,11 +78,12 @@ Whole-table export streams from SQL Server without the snapshot limit. Downloads
 **SQL scripts > Add script folder** links an existing folder and lists its `.sql` files, including subfolders, above the saved query library. The Windows folder picker also accepts a pasted path, including quoted paths and environment variables such as `%USERPROFILE%\Downloads`.
 
 - ExQL only reads these files. It never copies, changes or uploads them, and removing a folder from ExQL only unlinks it.
+- The sort button beside **Add script folder** switches between name order (natural, so `2.sql` comes before `10.sql`) and newest created first, where each subfolder is placed by its newest script. The choice is remembered. The age beside each script follows the order: last modified by name, created by newest. A `?` means the file system keeps no creation time; those scripts are listed last.
 - Listings refresh on app start, window focus, opening SQL scripts, and the refresh button.
 - Click a filename to read it into the editor. Play reads the latest disk content and immediately runs it on the current connection.
 - Unmodified open scripts reload on focus. Edited scripts show a notice when disk content changes, with **Reload from disk** available.
 - **Save query** creates an explicit library copy.
-- Each folder listing shows up to 2,000 files, and each opened script may be at most 4 MiB. UTF-8 and UTF-16 with a byte-order mark are supported.
+- Each folder listing shows the first 2,000 files by path, before sorting, and each opened script may be at most 4 MiB. UTF-8 and UTF-16 with a byte-order mark are supported.
 - Hidden, system and linked files or subfolders are skipped. Subfolders ExQL cannot search, for example because access is denied, are named under the folder so missing scripts are never silent.
 
 ## Layout
