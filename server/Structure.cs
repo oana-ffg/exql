@@ -67,7 +67,8 @@ public static class Structure
                 else byId[minor].Properties.Add(property);
             }
         }
-        var vectors = columns.Any(column => column.Type.BaseName == "vector")
+        // vector is a built-in type stored as varbinary, so it is found by its own name.
+        var vectors = columns.Any(column => column.Type is { Name: "vector", UserDefined: false })
             ? await Vectors(connection, objectId, ct)
             : [];
         return new([.. columns.Select(column => column.Column with
@@ -100,6 +101,7 @@ public static class Structure
     /// <summary>The type as it would be declared, such as nvarchar(max), decimal(18,2) or dbo.Phone (nvarchar(20)).</summary>
     internal static string TypeName(DeclaredType type)
     {
+        if (type.Vector is { } vector) return $"vector({vector.Dimensions}{(vector.HalfPrecision ? ", float16" : "")})";
         var qualified = type.Name is null ? null : type.UserDefined ? $"{type.Schema}.{type.Name}" : type.Name;
         if (type.Assembly) return qualified ?? "hidden CLR type";
         var size = type.MaxLength == -1 ? "max" : null;
@@ -111,7 +113,6 @@ public static class Structure
             "decimal" or "numeric" => $"{type.BaseName}({type.Precision},{type.Scale})",
             "datetime2" or "datetimeoffset" or "time" => $"{type.BaseName}({type.Scale})",
             "xml" when type.XmlSchemaCollection is { } collection => $"xml({(type.XmlDocument ? "DOCUMENT" : "CONTENT")} {collection})",
-            "vector" when type.Vector is { } vector => $"vector({vector.Dimensions}{(vector.HalfPrecision ? ", float16" : "")})",
             _ => type.BaseName!,
         };
         // Alias types, including the built-in sysname, name the type they stand for.

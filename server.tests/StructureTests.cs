@@ -62,7 +62,9 @@ public sealed class StructureTests
     [Fact]
     public void VectorsShowDimensionsAndHalfPrecision()
     {
-        Assert.Equal("vector(3)", TypeName(System("vector") with { Vector = new(3, false) }));
-        Assert.Equal("vector(1536, float16)", TypeName(System("vector") with { Vector = new(1536, true) }));
+        // SQL Server 2025 stores vector(3) as varbinary(20): an 8-byte header and 4 bytes per dimension.
+        var vector = new DeclaredType("vector", "sys", false, false, true, "varbinary", 20, 0, 0);
+        Assert.Equal("vector(3)", TypeName(vector with { Vector = new(3, false) }));
+        Assert.Equal("vector(1536, float16)", TypeName(vector with { MaxLength = 3080, Vector = new(1536, true) }));
     }
 }
