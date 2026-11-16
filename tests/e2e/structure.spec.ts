@@ -44,7 +44,8 @@ test("Structure shows each column's declared type and extended properties", asyn
     "nvarchar(max)",
   );
   await expect(await gridCell(page, 0, "MS_Description")).toHaveText("NULL");
-  await expect(panel.getByText("9 columns", { exact: true })).toBeVisible();
+  const status = panel.locator(".status-bar");
+  await expect(status).toContainText("9 columns");
   // Filters, exports and paging belong to the data.
   await expect(
     panel.getByRole("button", { name: "Apply filters" }),
@@ -77,5 +78,5 @@ test("Structure shows each column's declared type and extended properties", asyn
     panel.getByRole("region", { name: "View properties" }),
   ).toContainText("This view has no extended properties.");
   await expect(await gridCell(page, 3, "Column")).toHaveText("Priority");
-  await expect(panel.getByText("4 columns", { exact: true })).toBeVisible();
+  await expect(status).toContainText("4 columns");
 });

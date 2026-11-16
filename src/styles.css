@@ -967,14 +967,22 @@ main {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.query-toolbar {
+.query-toolbar,
+.table-toolbar {
   flex-wrap: wrap;
 }
-.query-toolbar > div:first-child {
+.query-toolbar > div:first-child,
+.table-toolbar > div:first-child {
   min-width: 0;
 }
-.query-toolbar > div:last-child {
+/* The table's name, kind and view switch share a line only while they fit. */
+.table-toolbar > div:first-child,
+.query-toolbar > div:last-child,
+.table-toolbar > div:last-child {
   flex-wrap: wrap;
+}
+.query-toolbar > div:last-child,
+.table-toolbar > div:last-child {
   justify-content: flex-end;
 }
 .query-toolbar > div > .hint {
