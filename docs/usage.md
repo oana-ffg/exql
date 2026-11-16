@@ -8,6 +8,16 @@
 - Click a column header to sort. Primary keys break ties. Tables without a primary key have no guaranteed order unless you choose a sort column.
 - Tables and query results display 200 rows per page.
 
+## Structure
+
+**Structure**, beside **Data** above a table or view, lists every column with its declared type, such as `nvarchar(50)`, `nvarchar(max)`, `decimal(18,2)` or `datetime2(7)`. Alias types also show the type they stand for, such as `dbo.PhoneNumber (nvarchar(20))`, and SQL Server 2025 vectors show their dimensions.
+
+- After the column's type, nullability and primary key come its extended properties: `MS_Description`, the description SSMS edits, always, then one column for each other property name in the table. NULL means the column does not have that property.
+- Then come identity seed and increment, default, computed definition and collation.
+- The table's or view's own extended properties are listed above the columns.
+- Select and copy cells or rows as in any read-only grid. **Refresh** reads the structure again. Opening a table shows its data first.
+- SQL Server hides metadata your login may not see. For example, default and computed definitions need VIEW DEFINITION permission, and show as NULL without it.
+
 ## Filters
 
 Add column filters, choose all conditions (AND) or any condition (OR), then click **Apply filters**. Filters are drafts until you apply them. Text contains and prefix filters match literal characters, including `%` and `_`.

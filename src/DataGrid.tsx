@@ -54,6 +54,7 @@ export const DataGrid = memo(function DataGrid({
   onFollowKey,
   onNotice,
   disabled,
+  showColumnTypes = true,
 }: {
   data: GridResult;
   table: TableId | null;
@@ -66,6 +67,8 @@ export const DataGrid = memo(function DataGrid({
   onFollowKey: (key: ForeignKey, values: string[]) => void;
   onNotice: (notice: string) => void;
   disabled: boolean;
+  // Off where the grid's own columns are not SQL data, and their types would only mislead.
+  showColumnTypes?: boolean;
 }) {
   const [active, setActive] = useState<Position>({ row: 0, col: 0 });
   const [anchor, setAnchor] = useState<Position>({ row: 0, col: 0 });
@@ -482,10 +485,12 @@ export const DataGrid = memo(function DataGrid({
                         />
                       )}
                     </button>
-                    <span>
-                      {column.type}
-                      {!column.editable && <LockKeyhole size={10} />}
-                    </span>
+                    {showColumnTypes && (
+                      <span>
+                        {column.type}
+                        {!column.editable && <LockKeyhole size={10} />}
+                      </span>
+                    )}
                   </div>
                 </th>
               ))}

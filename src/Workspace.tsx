@@ -4,6 +4,7 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -21,6 +22,7 @@ import {
   Save,
   Square,
   Table2,
+  TableProperties,
   X,
 } from "lucide-react";
 import { request, download, exportText } from "./api";
@@ -38,6 +40,7 @@ import {
 import { RunTimer } from "./RunTimer";
 import { Sidebar } from "./Sidebar";
 import { Splitter } from "./Splitter";
+import { structureGrid } from "./structure";
 import { TimeoutSelect } from "./TimeoutSelect";
 import type { Pane } from "./paneLayout";
 import { copyText } from "./clipboard";
@@ -53,6 +56,7 @@ import type {
   Session,
   TableId,
   TableRequest,
+  TableStructure,
 } from "./types";
 
 const noEdits: Edit[] = [];
@@ -118,6 +122,9 @@ export function Workspace({
   const [tableRequest, setTableRequest] = useState<TableRequest | null>(null);
   // Where to return to after following foreign keys.
   const [tableTrail, setTableTrail] = useState<TableView[]>([]);
+  const [tableView, setTableView] = useState<"data" | "structure">("data");
+  // Read when first shown, and kept until the table is loaded again.
+  const [structure, setStructure] = useState<TableStructure | null>(null);
   const [filters, setFilters] = useState<Filter[]>([]);
   const [match, setMatch] = useState<"all" | "any">("all");
   const [edits, setEdits] = useState<Edit[]>([]);
@@ -143,8 +150,21 @@ export function Workspace({
   // Lasts until changed, so re-running a failed migration keeps its longer limit.
   const [timeoutOverride, setTimeoutOverride] = useState<number | null>(null);
   const controller = useRef<AbortController | null>(null);
-  const data = mode === "table" ? tableData : queryData;
-  const offset = mode === "table" ? (tableRequest?.offset ?? 0) : queryOffset;
+  const structureData = useMemo(
+    () => structure && structureGrid(structure),
+    [structure],
+  );
+  const showingStructure = mode === "table" && tableView === "structure";
+  const data = showingStructure
+    ? structureData
+    : mode === "table"
+      ? tableData
+      : queryData;
+  const offset = showingStructure
+    ? 0
+    : mode === "table"
+      ? (tableRequest?.offset ?? 0)
+      : queryOffset;
   const result = queryResponse?.results[resultIndex];
   const scriptFolder = scriptFolders.folders.find(
     (folder) => folder.id === script?.folderId,
@@ -250,6 +270,8 @@ export function Workspace({
         setTable(nextTable);
         setTableRequest(next);
         setTableData(page);
+        setTableView("data");
+        setStructure(null);
         setFilters(next.filters);
         setMatch(next.match);
         setMode("table");
@@ -259,6 +281,21 @@ export function Workspace({
     },
     [session, discardEdits, perform, table, endpoint],
   );
+
+  const loadStructure = useCallback(async () => {
+    if (!session || !table) return;
+    await perform("Loading structure", async (signal) => {
+      setStructure(
+        await request<TableStructure>(
+          endpoint("/structure"),
+          { schema: table.schema, table: table.name },
+          signal,
+        ),
+      );
+      setTableView("structure");
+      setGeneration((value) => value + 1);
+    });
+  }, [session, table, perform, endpoint]);
 
   const editCell = useCallback(
     (edit: Edit) => {
@@ -518,20 +555,22 @@ export function Workspace({
     });
   }
 
+  const tableGrid = mode === "table" && !showingStructure;
   const grid = data && (
     <DataGrid
-      key={`${mode}:${generation}`}
+      key={`${showingStructure ? "structure" : mode}:${generation}`}
       data={data}
-      table={mode === "table" ? table : null}
-      edits={mode === "table" ? edits : noEdits}
+      table={tableGrid ? table : null}
+      edits={tableGrid ? edits : noEdits}
       onEdit={editCell}
-      sort={mode === "table" ? (tableRequest?.sort ?? null) : null}
+      sort={tableGrid ? (tableRequest?.sort ?? null) : null}
       descending={tableRequest?.descending ?? false}
       onSort={sortColumn}
       onFilter={addFilter}
       onFollowKey={followForeignKey}
       onNotice={setNotice}
       disabled={!!busy}
+      showColumnTypes={!showingStructure}
     />
   );
   const connectionPrompt = (
@@ -661,6 +700,8 @@ export function Workspace({
                       setTableTrail([]);
                       setTable(null);
                       setTableData(null);
+                      setTableView("data");
+                      setStructure(null);
                       setQueryData(null);
                       setQueryResponse(null);
                     });
@@ -820,6 +861,31 @@ export function Workspace({
                   <div>
                     <h1>{table.name}</h1>
                     <span className="tag">{table.kind}</span>
+                    <div
+                      className="view-switch"
+                      role="group"
+                      aria-label="Table view"
+                    >
+                      <button
+                        aria-pressed={!showingStructure}
+                        disabled={!!busy}
+                        onClick={() => setTableView("data")}
+                      >
+                        <Table2 size={14} />
+                        Data
+                      </button>
+                      <button
+                        aria-pressed={showingStructure}
+                        disabled={!!busy}
+                        onClick={() => {
+                          if (structure) setTableView("structure");
+                          else void loadStructure();
+                        }}
+                      >
+                        <TableProperties size={14} />
+                        Structure
+                      </button>
+                    </div>
                   </div>
                   <div>
                     {previousTable && (
@@ -839,40 +905,55 @@ export function Workspace({
                     )}
                     <button
                       disabled={!!busy}
-                      onClick={() => tableRequest && loadTable(tableRequest)}
+                      onClick={() =>
+                        showingStructure
+                          ? void loadStructure()
+                          : tableRequest && loadTable(tableRequest)
+                      }
                     >
                       <RefreshCw size={14} />
                       Refresh
                     </button>
-                    <button
-                      disabled={!!busy || !data}
-                      onClick={() => setExportOpen(true)}
-                    >
-                      <Download size={14} />
-                      Export
-                    </button>
+                    {!showingStructure && (
+                      <button
+                        disabled={!!busy || !data}
+                        onClick={() => setExportOpen(true)}
+                      >
+                        <Download size={14} />
+                        Export
+                      </button>
+                    )}
                   </div>
                 </div>
-                <FilterBar
-                  columns={tableData?.columns ?? []}
-                  filters={filters}
-                  match={match}
-                  onMatch={setMatch}
-                  onChange={(next) => {
-                    setFilters(next);
-                    if (!next.length && tableRequest?.filters.length)
-                      void loadTable({
-                        ...tableRequest,
-                        filters: [],
-                        offset: 0,
-                      });
-                  }}
-                  onApply={() =>
-                    tableRequest &&
-                    loadTable({ ...tableRequest, filters, match, offset: 0 })
-                  }
-                  disabled={!!busy}
-                />
+                {showingStructure ? (
+                  structure && (
+                    <ObjectProperties
+                      kind={table.kind}
+                      properties={structure.properties}
+                    />
+                  )
+                ) : (
+                  <FilterBar
+                    columns={tableData?.columns ?? []}
+                    filters={filters}
+                    match={match}
+                    onMatch={setMatch}
+                    onChange={(next) => {
+                      setFilters(next);
+                      if (!next.length && tableRequest?.filters.length)
+                        void loadTable({
+                          ...tableRequest,
+                          filters: [],
+                          offset: 0,
+                        });
+                    }}
+                    onApply={() =>
+                      tableRequest &&
+                      loadTable({ ...tableRequest, filters, match, offset: 0 })
+                    }
+                    disabled={!!busy}
+                  />
+                )}
               </>
             )}
             {grid ?? connectionPrompt}
@@ -914,9 +995,11 @@ export function Workspace({
                 <span
                   className={`connection-dot ${session ? "connected" : ""}`}
                 />
-                {data
-                  ? `${data.rows.length.toLocaleString()} rows loaded`
-                  : "Ready"}
+                {showingStructure && data
+                  ? `${data.rows.length.toLocaleString()} ${data.rows.length === 1 ? "column" : "columns"}`
+                  : data
+                    ? `${data.rows.length.toLocaleString()} rows loaded`
+                    : "Ready"}
                 {elapsed !== null && (
                   <span className="muted">· {formatElapsed(elapsed)}</span>
                 )}
@@ -924,7 +1007,7 @@ export function Workspace({
             )}
           </div>
           <div>
-            {data && (
+            {data && !showingStructure && (
               <>
                 <span>
                   {data.rows.length ? offset + 1 : 0}–
@@ -952,9 +1035,11 @@ export function Workspace({
               </>
             )}
             <span className="keyboard-hint">
-              {mode === "table"
-                ? "Double-click to edit · Shift + arrows to select · Ctrl C to copy"
-                : "Ctrl Enter to run · Ctrl C to copy cells"}
+              {showingStructure
+                ? "Shift + arrows to select · Ctrl C to copy"
+                : mode === "table"
+                  ? "Double-click to edit · Shift + arrows to select · Ctrl C to copy"
+                  : "Ctrl Enter to run · Ctrl C to copy cells"}
             </span>
           </div>
         </footer>
@@ -1010,5 +1095,35 @@ export function Workspace({
         />
       )}
     </div>
+  );
+}
+
+function ObjectProperties({
+  kind,
+  properties,
+}: {
+  kind: TableId["kind"];
+  properties: TableStructure["properties"];
+}) {
+  return (
+    <section
+      className="object-properties"
+      aria-label={kind === "view" ? "View properties" : "Table properties"}
+    >
+      {properties.length ? (
+        <dl>
+          {properties.map((property) => (
+            <div key={property.name}>
+              <dt>{property.name}</dt>
+              <dd className={property.value === null ? "null-cell" : ""}>
+                {property.value ?? "NULL"}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      ) : (
+        <p className="hint">This {kind} has no extended properties.</p>
+      )}
+    </section>
   );
 }

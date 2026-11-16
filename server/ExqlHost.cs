@@ -103,6 +103,11 @@ public static class ExqlHost
             await using var connection = await Database.Open(Session(context), ct);
             return await Database.Page(connection, request, ct);
         });
+        api.MapPost("/structure", async (StructureRequest request, HttpContext context, CancellationToken ct) =>
+        {
+            await using var connection = await Database.Open(Session(context), ct);
+            return await Structure.Read(connection, request.Schema, request.Table, ct);
+        });
         api.MapPost("/edit", async (EditRequest request, HttpContext context, CancellationToken ct) =>
         {
             await using var connection = await Database.Open(Session(context), ct);

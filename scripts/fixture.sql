@@ -102,3 +102,10 @@ GO
 IF OBJECT_ID(N'dbo.OpenWorkItems', N'V') IS NULL
     EXEC(N'CREATE VIEW dbo.OpenWorkItems AS SELECT Id,Title,Status,Priority FROM dbo.WorkItems WHERE Status=N''Open''');
 GO
+IF NOT EXISTS (SELECT 1 FROM sys.fn_listextendedproperty(N'MS_Description', N'SCHEMA', N'dbo', N'TABLE', N'WorkItems', NULL, NULL))
+    EXEC sys.sp_addextendedproperty N'MS_Description', N'Work tracked by the team.', N'SCHEMA', N'dbo', N'TABLE', N'WorkItems';
+IF NOT EXISTS (SELECT 1 FROM sys.fn_listextendedproperty(N'MS_Description', N'SCHEMA', N'dbo', N'TABLE', N'WorkItems', N'COLUMN', N'Title'))
+    EXEC sys.sp_addextendedproperty N'MS_Description', N'Short summary — shown in lists.', N'SCHEMA', N'dbo', N'TABLE', N'WorkItems', N'COLUMN', N'Title';
+IF NOT EXISTS (SELECT 1 FROM sys.fn_listextendedproperty(N'Owner', N'SCHEMA', N'dbo', N'TABLE', N'WorkItems', N'COLUMN', N'Status'))
+    EXEC sys.sp_addextendedproperty N'Owner', N'Planning', N'SCHEMA', N'dbo', N'TABLE', N'WorkItems', N'COLUMN', N'Status';
+GO

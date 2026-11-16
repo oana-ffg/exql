@@ -548,6 +548,53 @@ main {
   font-size: 10px;
   padding: 3px 6px;
 }
+.view-switch {
+  display: flex;
+  gap: 4px;
+  margin-left: 10px;
+}
+.view-switch button {
+  background: transparent;
+  padding: 5px 9px;
+}
+.view-switch button[aria-pressed="true"] {
+  background: #253444;
+  border-color: #4a625a;
+  color: var(--accent);
+}
+.object-properties {
+  padding: 0 24px 16px;
+  border-bottom: 1px solid var(--line);
+  max-height: 32vh;
+  overflow: auto;
+  flex-shrink: 0;
+  font-size: 12px;
+}
+.object-properties p {
+  margin: 0;
+}
+.object-properties dl {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 6px 16px;
+  margin: 0;
+}
+.object-properties dl > div {
+  display: contents;
+}
+.object-properties dt {
+  color: var(--muted);
+  font-family: var(--mono);
+}
+.object-properties dd {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.object-properties dd.null-cell {
+  color: #61748e;
+  font-style: italic;
+}
 .filter-bar {
   padding: 0 24px 16px;
   border-bottom: 1px solid var(--line);
@@ -1145,7 +1192,8 @@ dialog .hint svg {
   .table-toolbar {
     padding: 15px 18px;
   }
-  .filter-bar {
+  .filter-bar,
+  .object-properties {
     padding-left: 18px;
     padding-right: 18px;
   }

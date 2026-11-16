@@ -13,6 +13,11 @@ public sealed record TableRequest(string Schema, string Table, List<Filter> Filt
 public sealed record ForeignKeyColumn(string Column, string ReferencedColumn);
 public sealed record ForeignKey(string ReferencedSchema, string ReferencedTable, List<ForeignKeyColumn> Columns);
 public sealed record GridResult(List<Column> Columns, List<string?[]> Rows, bool HasMore, long? Total = null, List<ForeignKey>? ForeignKeys = null);
+public sealed record StructureRequest(string Schema, string Table);
+public sealed record ExtendedProperty(string Name, string? Value);
+public sealed record StructureColumn(string Name, string Type, bool Nullable, bool PrimaryKey, string? Identity, string? Default,
+    string? Computed, string? Collation, List<ExtendedProperty> Properties);
+public sealed record TableStructure(List<StructureColumn> Columns, List<ExtendedProperty> Properties);
 public sealed record CellChange(string Column, string? Value);
 public sealed record RowChange(Dictionary<string, string?> Original, List<CellChange> Changes);
 public sealed record EditRequest(string Schema, string Table, List<RowChange> Rows);
