@@ -57,6 +57,7 @@
 ## Features
 
 - **Data grid.** Keyboard navigation, range selection, column filters, sorting and paging through tables and views.
+- **Structure.** Every column of a table or view with its exact declared type, such as `nvarchar(max)` or `decimal(18,2)`, and its extended properties, including `MS_Description`.
 - **Safe editing.** Staged cell edits on tables with a primary key. Concurrent changes are detected, and a conflict rolls back the whole batch.
 - **Copy and export.** Copy as JSON, CSV or SQL, or export whole tables and query results. Large integers and decimals keep their exact digits.
 - **Paste into an AI chat.** **Copy all as text** puts a run's result sets, messages and error into one plain-text block.
