@@ -5,6 +5,7 @@
 - `server/`: SQL access, result storage, exports and Windows credentials
 - `desktop/`: the native window and packaging
 - `devhost/`: the backend without a window, for development and integration tests
+- `server.integration.tests/`: SQL-backed C# tests with disposable databases
 - `src/`: the React UI and pure data formatting functions
 
 No production database credentials or telemetry are included.
@@ -61,7 +62,7 @@ If uploading fails, inspect the draft before retrying. Never reuse a version for
 GitHub Actions runs on pull requests and pushes to main:
 
 - **Windows checks:** formatting, TypeScript and frontend build, Vitest, server tests (including Windows Credential Manager) and desktop build.
-- **SQL Server 2019, 2022 and 2025 Linux containers:** real API and database journeys against each engine using SQL authentication.
+- **SQL Server 2019, 2022 and 2025 Linux containers:** real API and database journeys, plus SQL-backed C# integration tests, against each engine using SQL authentication.
 - **Windows SQL Server Express:** the complete Edge UI suite, Windows authentication, SQL login and saved connection strings.
 - **Portable desktop:** package, extract and launch the real app, commit a grid edit, run SQL, save a query, restart, reconnect and verify a native download. A separate real portable update verifies integrity rejection, retry, restart guards and persistence through replacement.
 
@@ -82,6 +83,13 @@ npm run test:e2e
 
 `test:e2e` builds the frontend and manages the host and disposable databases. Defaults are `localhost` and Windows authentication, and the account needs permission to create and drop its test databases.
 
+The C# integration test calls `Structure.Read` on an impersonated connection to verify that columns and their extended properties remain visible when an alias type is hidden. It first checks that SQL Server actually hides the type, then compares the restricted result with the original login's result. Run it with the same SQL environment variables below and an account that can create databases and impersonate database users:
+
+```powershell
+dotnet restore server.integration.tests --configfile NuGet.Config
+dotnet test server.integration.tests --no-restore
+```
+
 | Variable                                       | Purpose                                                                                                 |
 | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
 | `EXQL_TEST_SERVER`                             | Another test server, optionally `hostname,port`                                                         |
@@ -93,7 +101,7 @@ The Windows observer uses the built-in .NET SQL client, and SQL-authenticated ru
 
 ### Isolation
 
-- SQL-backed tests create uniquely named `ExqlTest_` databases from `scripts/fixture.sql`, and each test drops only the database it created. They never use ExqlDemo.
+- SQL-backed tests create uniquely named `ExqlTest_` databases, and each test drops only the database it created. Playwright uses `scripts/fixture.sql`; C# integration tests create their own schema and remove the impersonated user with the database. They never use ExqlDemo.
 - Playwright runs start their own devhost on a free port with fresh settings, so they can run alongside the dev host and each other.
 - Database assertions use an independent SQL client, including exact numeric and date values, committed mutations, rollback, cancellation, exports and executable clipboard SQL.
 - Credential tests create randomly named Windows vault entries and remove them.
