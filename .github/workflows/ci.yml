@@ -67,8 +67,14 @@ jobs:
       - run: echo "::add-mask::$EXQL_TEST_PASSWORD"
       - run: npm ci
       - run: npm run build
-      - name: Wait for SQL readiness and run API database journeys
-        run: node scripts/ci/wait-for-sql.mjs && npx playwright test api.spec.ts
+      - name: Wait for SQL readiness
+        run: node scripts/ci/wait-for-sql.mjs
+      - name: Test Structure with restricted SQL metadata visibility
+        run: |
+          dotnet restore server.integration.tests --configfile NuGet.Config
+          dotnet test server.integration.tests --no-restore
+      - name: Run API database journeys
+        run: npx playwright test api.spec.ts
       - name: SQL container diagnostics
         if: failure()
         run: docker logs ${{ job.services.sql.id }} > artifacts/sql-server.log 2>&1
