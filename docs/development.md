@@ -11,7 +11,7 @@ No production database credentials or telemetry are included.
 
 ## Build from source
 
-Development requires Windows, Node.js (`.node-version` has the recommended version and `package.json` the supported ranges) and the .NET 10 SDK.
+Development requires Windows, Node.js (`.node-version` has the recommended version and `package.json` the supported ranges) and the .NET 10 SDK. `global.json` keeps builds on the newest installed .NET 10 SDK even where a newer major version is installed, as on GitHub's runners.
 
 ```powershell
 npm ci
