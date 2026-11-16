@@ -13,6 +13,7 @@ import type {
   GridResult,
   Session,
   TableRequest,
+  TableStructure,
   QueryResponse,
 } from "../../src/types";
 
@@ -858,4 +859,171 @@ test("aborting a query preserves earlier commits and closes its SQL connection",
     abort.abort();
     await running;
   }
+});
+
+async function structure(table: string, schema = "dbo") {
+  const response = await api.post(url("/structure"), {
+    data: { schema, table },
+  });
+  expect(response.ok(), await response.text()).toBeTruthy();
+  return (await response.json()) as TableStructure;
+}
+test("structure shows declared types, column details and extended properties", async () => {
+  const workItems = await structure("WorkItems");
+  expect(workItems.properties).toEqual([
+    { name: "MS_Description", value: "Work tracked by the team." },
+  ]);
+  const byName = new Map(
+    workItems.columns.map((column) => [column.name, column]),
+  );
+  expect(workItems.columns.map((column) => column.name)).toEqual([
+    "Id",
+    "Title",
+    "Status",
+    "Priority",
+    "Estimate",
+    "Active",
+    "Notes",
+    "CreatedAt",
+    "Version",
+  ]);
+  expect(byName.get("Id")).toEqual({
+    name: "Id",
+    type: "int",
+    nullable: false,
+    primaryKey: true,
+    identity: "IDENTITY(1,1)",
+    default: null,
+    computed: null,
+    collation: null,
+    properties: [],
+  });
+  expect(byName.get("Title")).toMatchObject({
+    type: "nvarchar(200)",
+    nullable: false,
+    primaryKey: false,
+    collation: expect.any(String),
+    properties: [
+      { name: "MS_Description", value: "Short summary \u2014 shown in lists." },
+    ],
+  });
+  expect(byName.get("Status")?.properties).toEqual([
+    { name: "Owner", value: "Planning" },
+  ]);
+  expect(byName.get("Estimate")).toMatchObject({
+    type: "decimal(18,2)",
+    nullable: true,
+  });
+  expect(byName.get("Notes")?.type).toBe("nvarchar(max)");
+  expect(byName.get("CreatedAt")).toMatchObject({
+    type: "datetime2(7)",
+    default: "(sysutcdatetime())",
+  });
+  expect(byName.get("Version")?.type).toBe("timestamp");
+  expect(
+    (await structure("TypeSamples")).columns.find(
+      (column) => column.name === "Derived",
+    ),
+  ).toMatchObject({ type: "int", computed: "([Id]+(1))" });
+
+  await execute(
+    databaseName,
+    "CREATE TYPE dbo.PhoneNumber FROM nvarchar(20) NULL;",
+  );
+  await execute(
+    databaseName,
+    `CREATE XML SCHEMA COLLECTION dbo.Notes AS N'<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:element name="note" type="xs:string"/></xs:schema>';`,
+  );
+  await execute(
+    databaseName,
+    `CREATE TABLE dbo.Declared (
+       Code char(2) NOT NULL, Label varchar(50) NULL, Body varchar(max) NULL, Wide nchar(10) NULL,
+       Hash binary(16) NULL, Blob varbinary(max) NULL, Ratio numeric(5,0) NULL, Precise decimal(38,18) NULL,
+       Stamp datetime2(3) NULL, Clock time(0) NULL, Zoned datetimeoffset(2) NULL, Approximate float NULL,
+       Small real NULL, Doc xml NULL, Typed xml(DOCUMENT dbo.Notes) NULL, Phone dbo.PhoneNumber,
+       ObjectName sysname NULL, Node hierarchyid NULL, Place geography NULL,
+       Total AS (Ratio + Ratio) PERSISTED, Code2 char(2) COLLATE Latin1_General_BIN2 NULL,
+       CONSTRAINT PK_Declared PRIMARY KEY (Code));
+     EXEC sys.sp_addextendedproperty N'Revision', 3, N'SCHEMA', N'dbo', N'TABLE', N'Declared', N'COLUMN', N'Label';
+     EXEC sys.sp_addextendedproperty N'MS_Description', N'', N'SCHEMA', N'dbo', N'TABLE', N'Declared', N'COLUMN', N'Label';
+     EXEC sys.sp_addextendedproperty N'Largest', 12345678901234567890123456789012345678, N'SCHEMA', N'dbo', N'TABLE', N'Declared', N'COLUMN', N'Label';`,
+  );
+  const declared = await structure("Declared");
+  expect(
+    Object.fromEntries(
+      declared.columns.map((column) => [column.name, column.type]),
+    ),
+  ).toEqual({
+    Code: "char(2)",
+    Label: "varchar(50)",
+    Body: "varchar(max)",
+    Wide: "nchar(10)",
+    Hash: "binary(16)",
+    Blob: "varbinary(max)",
+    Ratio: "numeric(5,0)",
+    Precise: "decimal(38,18)",
+    Stamp: "datetime2(3)",
+    Clock: "time(0)",
+    Zoned: "datetimeoffset(2)",
+    Approximate: "float",
+    Small: "real",
+    Doc: "xml",
+    Typed: "xml(DOCUMENT dbo.Notes)",
+    Phone: "dbo.PhoneNumber (nvarchar(20))",
+    ObjectName: "sysname (nvarchar(128))",
+    Node: "hierarchyid",
+    Place: "geography",
+    Total: "numeric(6,0)",
+    Code2: "char(2)",
+  });
+  const label = declared.columns.find((column) => column.name === "Label");
+  // Ordered by name; non-text values, beyond .NET decimal too, and an empty description all survive.
+  expect(label?.properties).toEqual([
+    { name: "Largest", value: "12345678901234567890123456789012345678" },
+    { name: "MS_Description", value: "" },
+    { name: "Revision", value: "3" },
+  ]);
+  expect(
+    declared.columns.find((column) => column.name === "Total")?.computed,
+  ).toBe("([Ratio]+[Ratio]) PERSISTED");
+  expect(
+    declared.columns.find((column) => column.name === "Code2")?.collation,
+  ).toBe("Latin1_General_BIN2");
+  expect(declared.properties).toEqual([]);
+
+  const view = await structure("OpenWorkItems");
+  expect(view.columns.map((column) => [column.name, column.type])).toEqual([
+    ["Id", "int"],
+    ["Title", "nvarchar(200)"],
+    ["Status", "nvarchar(30)"],
+    ["Priority", "int"],
+  ]);
+  const missing = await api.post(url("/structure"), {
+    data: { schema: "dbo", table: "DoesNotExist" },
+  });
+  expect(missing.status()).toBe(404);
+});
+test("structure shows vector dimensions on SQL Server 2025 and later", async () => {
+  test.skip(
+    Number(session.serverVersion.split(".")[0]) < 17,
+    "The vector type needs SQL Server 2025.",
+  );
+  await execute(
+    databaseName,
+    "CREATE TABLE dbo.Embeddings (Id int NOT NULL PRIMARY KEY, Embedding vector(3) NULL);",
+  );
+  const embeddings = await structure("Embeddings");
+  expect(embeddings.columns.map((column) => column.type)).toEqual([
+    "int",
+    "vector(3)",
+  ]);
+});
+test("sql_variant decimals keep every digit in query results", async () => {
+  const response = await query(
+    "SELECT CAST(CAST(12345678901234567890123456789012345678 AS decimal(38,0)) AS sql_variant) AS Value, CAST(CAST(-1.5 AS decimal(5,2)) AS sql_variant) AS Small;",
+  );
+  expect(response.error).toBeNull();
+  expect(response.results[0].page.rows).toEqual([
+    ["12345678901234567890123456789012345678", "-1.50"],
+  ]);
 });

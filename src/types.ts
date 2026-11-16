@@ -99,3 +99,23 @@ export interface Edit {
   column: string;
   value: Cell;
 }
+export interface ExtendedProperty {
+  name: string;
+  value: string | null;
+}
+export interface StructureColumn {
+  name: string;
+  type: string;
+  nullable: boolean;
+  primaryKey: boolean;
+  identity: string | null;
+  default: string | null;
+  computed: string | null;
+  collation: string | null;
+  properties: ExtendedProperty[];
+}
+export interface TableStructure {
+  columns: StructureColumn[];
+  // Extended properties of the table or view itself.
+  properties: ExtendedProperty[];
+}

@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using System.Data.SqlTypes;
 using Microsoft.Data.SqlClient;
 
 namespace Exql;
@@ -11,6 +12,8 @@ public static class SqlValues
     {
         if (reader.IsDBNull(index)) return null;
         if (reader.GetDataTypeName(index) is "decimal" or "numeric") return reader.GetSqlDecimal(index).ToString();
+        // A decimal inside a sql_variant can have more digits than .NET decimal holds.
+        if (reader.GetDataTypeName(index) == "sql_variant" && reader.GetSqlValue(index) is SqlDecimal variant) return variant.ToString();
         return reader.GetValue(index) switch
         {
             byte[] bytes => "0x" + Convert.ToHexString(bytes),
