@@ -945,7 +945,8 @@ test("structure shows declared types, column details and extended properties", a
        Total AS (Ratio + Ratio) PERSISTED, Code2 char(2) COLLATE Latin1_General_BIN2 NULL,
        CONSTRAINT PK_Declared PRIMARY KEY (Code));
      EXEC sys.sp_addextendedproperty N'Revision', 3, N'SCHEMA', N'dbo', N'TABLE', N'Declared', N'COLUMN', N'Label';
-     EXEC sys.sp_addextendedproperty N'MS_Description', N'', N'SCHEMA', N'dbo', N'TABLE', N'Declared', N'COLUMN', N'Label';`,
+     EXEC sys.sp_addextendedproperty N'MS_Description', N'', N'SCHEMA', N'dbo', N'TABLE', N'Declared', N'COLUMN', N'Label';
+     EXEC sys.sp_addextendedproperty N'Largest', 12345678901234567890123456789012345678, N'SCHEMA', N'dbo', N'TABLE', N'Declared', N'COLUMN', N'Label';`,
   );
   const declared = await structure("Declared");
   expect(
@@ -976,8 +977,9 @@ test("structure shows declared types, column details and extended properties", a
     Code2: "char(2)",
   });
   const label = declared.columns.find((column) => column.name === "Label");
-  // Ordered by name; a non-text value and an empty description both survive.
+  // Ordered by name; non-text values, beyond .NET decimal too, and an empty description all survive.
   expect(label?.properties).toEqual([
+    { name: "Largest", value: "12345678901234567890123456789012345678" },
     { name: "MS_Description", value: "" },
     { name: "Revision", value: "3" },
   ]);
@@ -1014,5 +1016,14 @@ test("structure shows vector dimensions on SQL Server 2025 and later", async () 
   expect(embeddings.columns.map((column) => column.type)).toEqual([
     "int",
     "vector(3)",
+  ]);
+});
+test("sql_variant decimals keep every digit in query results", async () => {
+  const response = await query(
+    "SELECT CAST(CAST(12345678901234567890123456789012345678 AS decimal(38,0)) AS sql_variant) AS Value, CAST(CAST(-1.5 AS decimal(5,2)) AS sql_variant) AS Small;",
+  );
+  expect(response.error).toBeNull();
+  expect(response.results[0].page.rows).toEqual([
+    ["12345678901234567890123456789012345678", "-1.50"],
   ]);
 });

@@ -40,8 +40,15 @@ public sealed class StructureTests
     [Fact]
     public void ClrTypesAreNamedWithoutASize()
     {
-        Assert.Equal("hierarchyid", TypeName(new("hierarchyid", "sys", false, true, true, "hierarchyid", 892, 0, 0)));
-        Assert.Equal("app.Point", TypeName(new("Point", "app", true, true, true, "Point", 8000, 0, 0)));
+        Assert.Equal("hierarchyid", TypeName(new("hierarchyid", "sys", false, true, true, null, 892, 0, 0)));
+        Assert.Equal("app.Point", TypeName(new("Point", "app", true, true, true, null, 8000, 0, 0)));
+    }
+
+    [Fact]
+    public void TypesTheLoginMayNotSeeStillShowWhatIsKnown()
+    {
+        Assert.Equal("nvarchar(20) (hidden alias type)", TypeName(new(null, null, true, false, true, "nvarchar", 40, 0, 0)));
+        Assert.Equal("hidden CLR type", TypeName(new(null, null, true, true, true, null, 8000, 0, 0)));
     }
 
     [Fact]

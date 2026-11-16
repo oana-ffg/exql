@@ -11,8 +11,10 @@ public static class Structure
             DECLARE @id int = (SELECT o.object_id FROM sys.objects o JOIN sys.schemas s ON s.schema_id=o.schema_id
               WHERE s.name=@schema AND o.name=@table AND o.type IN ('U','V'));
             SELECT @id;
-            SELECT c.column_id, c.name, t.name, SCHEMA_NAME(t.schema_id), t.is_user_defined, t.is_assembly_type,
-              CAST(CASE WHEN c.user_type_id<>c.system_type_id THEN 1 ELSE 0 END AS bit), TYPE_NAME(c.system_type_id),
+            -- Every CLR type has system_type_id 240, which no system type row describes.
+            SELECT c.column_id, c.name, t.name, SCHEMA_NAME(t.schema_id), ISNULL(t.is_user_defined, CAST(1 AS bit)),
+              CAST(CASE WHEN c.system_type_id=240 THEN 1 ELSE 0 END AS bit),
+              CAST(CASE WHEN c.user_type_id<>c.system_type_id THEN 1 ELSE 0 END AS bit), bt.name,
               c.max_length, c.precision, c.scale, SCHEMA_NAME(x.schema_id), x.name, c.is_xml_document,
               c.is_nullable,
               CAST(CASE WHEN EXISTS (SELECT 1 FROM sys.indexes i JOIN sys.index_columns ic
@@ -21,7 +23,9 @@ public static class Structure
               CAST(idc.seed_value AS nvarchar(40)), CAST(idc.increment_value AS nvarchar(40)),
               dc.definition, cc.definition, cc.is_persisted, c.collation_name
             FROM sys.columns c
-            JOIN sys.types t ON t.user_type_id=c.user_type_id
+            -- A login may see a table but not a user-defined type it uses; built-in types are always visible.
+            LEFT JOIN sys.types t ON t.user_type_id=c.user_type_id
+            LEFT JOIN sys.types bt ON bt.user_type_id=c.system_type_id AND c.system_type_id<>240
             LEFT JOIN sys.xml_schema_collections x ON x.xml_collection_id=c.xml_collection_id AND c.xml_collection_id<>0
             LEFT JOIN sys.identity_columns idc ON idc.object_id=c.object_id AND idc.column_id=c.column_id
             LEFT JOIN sys.default_constraints dc ON dc.object_id=c.default_object_id
@@ -45,8 +49,8 @@ public static class Structure
             while (await reader.ReadAsync(ct))
             {
                 string? Text(int index) => reader.IsDBNull(index) ? null : reader.GetString(index);
-                var type = new DeclaredType(reader.GetString(2), reader.GetString(3), reader.GetBoolean(4), reader.GetBoolean(5),
-                    reader.GetBoolean(6), reader.GetString(7), reader.GetInt16(8), reader.GetByte(9), reader.GetByte(10),
+                var type = new DeclaredType(Text(2), Text(3), reader.GetBoolean(4), reader.GetBoolean(5),
+                    reader.GetBoolean(6), Text(7), reader.GetInt16(8), reader.GetByte(9), reader.GetByte(10),
                     Text(12) is { } collection ? $"{reader.GetString(11)}.{collection}" : null, reader.GetBoolean(13));
                 var identity = Text(16) is { } seed ? $"IDENTITY({seed},{reader.GetString(17)})" : null;
                 var computed = Text(19) is { } definition ? definition + (reader.GetBoolean(20) ? " PERSISTED" : "") : null;
@@ -88,14 +92,16 @@ public static class Structure
     }
 
     internal sealed record VectorShape(int Dimensions, bool HalfPrecision);
-    internal sealed record DeclaredType(string Name, string Schema, bool UserDefined, bool Assembly, bool Alias, string BaseName,
+    /// <param name="Name">The column's type, or null when this login may not see it.</param>
+    /// <param name="BaseName">The system type underneath, or null for CLR types.</param>
+    internal sealed record DeclaredType(string? Name, string? Schema, bool UserDefined, bool Assembly, bool Alias, string? BaseName,
         short MaxLength, byte Precision, byte Scale, string? XmlSchemaCollection = null, bool XmlDocument = false, VectorShape? Vector = null);
 
     /// <summary>The type as it would be declared, such as nvarchar(max), decimal(18,2) or dbo.Phone (nvarchar(20)).</summary>
     internal static string TypeName(DeclaredType type)
     {
-        var qualified = type.UserDefined ? $"{type.Schema}.{type.Name}" : type.Name;
-        if (type.Assembly) return qualified;
+        var qualified = type.Name is null ? null : type.UserDefined ? $"{type.Schema}.{type.Name}" : type.Name;
+        if (type.Assembly) return qualified ?? "hidden CLR type";
         var size = type.MaxLength == -1 ? "max" : null;
         var declared = type.BaseName switch
         {
@@ -106,9 +112,10 @@ public static class Structure
             "datetime2" or "datetimeoffset" or "time" => $"{type.BaseName}({type.Scale})",
             "xml" when type.XmlSchemaCollection is { } collection => $"xml({(type.XmlDocument ? "DOCUMENT" : "CONTENT")} {collection})",
             "vector" when type.Vector is { } vector => $"vector({vector.Dimensions}{(vector.HalfPrecision ? ", float16" : "")})",
-            _ => type.BaseName,
+            _ => type.BaseName!,
         };
         // Alias types, including the built-in sysname, name the type they stand for.
-        return type.Alias ? $"{qualified} ({declared})" : declared;
+        if (!type.Alias) return declared;
+        return qualified is null ? $"{declared} (hidden alias type)" : $"{qualified} ({declared})";
     }
 }
